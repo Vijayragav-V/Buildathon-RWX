@@ -152,6 +152,31 @@ def safe_literal_edit(old, new, inside_call=False):
     return True
 
 
+def same_literal_keys(old, new):
+    if not isinstance(old, ast.Dict) or not isinstance(new, ast.Dict):
+        return False
+    if any(k is None for k in old.keys + new.keys):
+        return False
+    try:
+        ast.literal_eval(old)
+        ast.literal_eval(new)
+    except (ValueError, TypeError):
+        return False
+    return [ast.dump(k) for k in old.keys] == [ast.dump(k) for k in new.keys]
+
+
+def same_header(old, new, omit):
+    if type(old) is not type(new):
+        return False
+    def freeze(value):
+        if isinstance(value, ast.AST):
+            return ast.dump(value)
+        if isinstance(value, list):
+            return tuple(freeze(item) for item in value)
+        return value
+    return all(freeze(getattr(old, key)) == freeze(getattr(new, key)) for key in old._fields if key != omit)
+
+
 def changed_classes(before, after, prefix=''):
     if len(before) != len(after):
         return None
@@ -160,14 +185,25 @@ def changed_classes(before, after, prefix=''):
         if ast.dump(old) == ast.dump(new):
             continue
         if isinstance(old, ast.ClassDef) and isinstance(new, ast.ClassDef):
-            if old.name != new.name or ast.dump(ast.Module(body=old.decorator_list + old.bases + old.keywords, type_ignores=[])) != ast.dump(ast.Module(body=new.decorator_list + new.bases + new.keywords, type_ignores=[])):
+            if not same_header(old, new, 'body'):
                 return None
             inner = changed_classes(old.body, new.body, prefix + old.name + '.')
             if inner is None:
                 return None
             changed.update(inner)
-        elif prefix and isinstance(old, (ast.Assign, ast.AnnAssign)) and literal_shape(old) == literal_shape(new) and safe_literal_edit(old, new):
-            changed.add(prefix[:-1])
+        elif isinstance(old, (ast.Assign, ast.AnnAssign)) and literal_shape(old) == literal_shape(new) and safe_literal_edit(old, new):
+            if not same_header(old, new, 'value'):
+                return None
+            targets = old.targets if isinstance(old, ast.Assign) else [old.target]
+            value = old.value
+            if isinstance(value, ast.UnaryOp) and isinstance(value.op, (ast.UAdd, ast.USub)):
+                value = value.operand
+            simple = len(targets) == 1 and isinstance(targets[0], ast.Name) and isinstance(value, ast.Constant)
+            dictionary = same_literal_keys(old.value, new.value)
+            if not prefix and not (simple or dictionary):
+                return None
+            field = targets[0].id if len(targets) == 1 and isinstance(targets[0], ast.Name) and (simple or dictionary) else None
+            changed.add((prefix[:-1], field, dictionary))
         else:
             return None
     return changed
@@ -203,7 +239,7 @@ class Selector:
         self.by_id = {t['id']: t['number'] for t in tests}
         self.index = {i: self.by_id[nodeid] for i, nodeid in enumerate(mapping['tests']) if nodeid in self.by_id}
         self.uncertain = {self.by_id[n] for n in mapping.get('uncertain', []) if n in self.by_id}
-        self.uncertain.update(self.by_id[n] for n in self.by_id if n not in set(mapping['tests']))
+        self.uncertain.update(self.by_id[n] for n in self.by_id.keys() - set(mapping['tests']))
         self.cache = {}
 
     def translate(self, indices):
@@ -236,22 +272,35 @@ class Selector:
         # still process every section; SQL fixture comments are never discarded.
         if ast.dump(tree, include_attributes=False) == ast.dump(after, include_attributes=False):
             return set()
+        child = self.translate(self.mapping.get('child_imports', {}).get(filename, ()))
         if observed_equivalent(tree, after, filename, self.mapping.get("identity", {})):
-            return set(self.uncertain)
+            return self.uncertain | child
         if import_structure(tree) != import_structure(after):
             classes = changed_classes(tree.body, after.body)
             if not classes:
                 return self.all
             selected = set(self.uncertain)
-            for cls in classes:
+            selected.update(child)
+            for cls, field, dictionary in classes:
+                if not cls:
+                    readers = self.mapping.get('private_globals', {}).get(f'{filename}:{field}')
+                    if readers is None:
+                        return self.all
+                    selected.update(self.translate(readers))
+                    continue
                 users = self.mapping.get('classes', {}).get(filename + ':' + cls)
                 if not users:
                     return self.all
+                index = 'dictionary_values' if dictionary else 'attributes'
+                attribute_users = self.mapping.get(index, {}).get(field)
+                if attribute_users is not None:
+                    users = set(users).intersection(attribute_users)
                 selected.update(self.translate(users))
             return selected
         lines = self.mapping['lines'].get(filename, {})
         scopes = [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda))]
         selected = set()
+        entered = self.mapping.get('entered', {}).get(filename)
         for lineno in changed:
             containing = [n for n in scopes if n.lineno <= lineno <= n.end_lineno]
             if not containing:
@@ -259,6 +308,11 @@ class Selector:
             scope = min(containing, key=lambda n: n.end_lineno - n.lineno)
             if not isinstance(scope, ast.Lambda) and lineno < scope.body[0].lineno:
                 return self.all
+            if entered is not None and isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                first = min([scope.lineno] + [d.lineno for d in scope.decorator_list])
+                if f'{scope.name}:{first}' not in entered:
+                    selected.update(child)
+                    continue
             # Cover the whole expression, not the entire function. A multiline
             # condition may emit a trace event only on its first physical line.
             expressions = [n for n in ast.walk(scope) if isinstance(n, ast.expr)
@@ -298,8 +352,15 @@ def main():
     except (OSError, ValueError, KeyError):
         selector = None
         print('Dependency map unavailable; selecting all tests.', file=sys.stderr)
-    for patch in sorted((args.data / 'commits').glob('*.patch')):
-        chosen = selector.select(patch.read_text()) if selector else {t['number'] for t in tests}
+    from replay import ReplayBudget
+    patches = sorted((args.data / 'commits').glob('*.patch'))
+    budget = ReplayBudget(len(patches))
+    by_number = {t['number']: t for t in tests}
+    for patch in patches:
+        change = patch.read_text()
+        chosen = selector.select(change) if selector else set(by_number)
+        if selector:
+            chosen = budget.refine(selector, chosen, change, by_number)
         workers = schedule([t for t in tests if t['number'] in chosen])
         print(json.dumps({'commit': patch.stem, 'workers': workers}, separators=(',', ':')))
 

@@ -114,6 +114,20 @@ class SelectorTests(unittest.TestCase):
         self.mapping['classes'] = {'sqlglot/example.py:Dialect': [1]}
         self.assertEqual(self.selector.select(patch(old, old.replace('1 / 2', '1 / 0'))), {7, 19})
 
+    def test_value_index_preserves_membership_changes(self):
+        old = 'class A:\n    TABLE = {"x": 1, "y": 2}\n'
+        (self.root/'sqlglot/example.py').write_text(old)
+        self.mapping['classes'] = {'sqlglot/example.py:A': [0, 1]}
+        self.mapping['dictionary_values'] = {'TABLE': [1]}
+        self.assertEqual(self.selector.select(patch(old, old.replace('1,', '3,'))), {19})
+        self.assertEqual(self.selector.select(patch(old, old.replace('"x"', '"z"'))), {7, 19})
+
+    def test_private_global_only_when_indexed(self):
+        old = '_NAME: str = "old"\n'; (self.root/'sqlglot/example.py').write_text(old)
+        self.mapping['private_globals'] = {'sqlglot/example.py:_NAME': [0]}
+        self.assertEqual(self.selector.select(patch(old, old.replace('old', 'new'))), {7})
+        self.assertEqual(self.selector.select(patch(old, old.replace('str', 'float'))), {7, 19})
+
     def test_schedule_accounts_for_worker_overhead(self):
         self.assertEqual(len(schedule(self.tests)), 1)
         tests = [{'number': i, 'seconds': 10} for i in range(8)]

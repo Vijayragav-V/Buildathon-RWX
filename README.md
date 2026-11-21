@@ -25,8 +25,8 @@ The GitHub Actions workflow runs regression tests and `make sample` on Linux.
    dependencies are expanded to the test class. A synchronous Future-compatible
    pool adapter keeps baseline work visible to the tracer when tests normally
    dispatch it to a process pool. Arguments and results round-trip through the
-   multiprocessing serializer to retain serialization dependencies. Actual subprocess launches and incomplete
-   baseline tests are marked uncertain and selected conservatively.
+   multiprocessing serializer to retain serialization dependencies. The collector also records covered lines and file reads in supported Python
+   subprocesses. Other launches and incomplete runs retain conservative coverage.
 3. At runtime, validate and apply each patch in memory against the original
    source. Entire-file Python AST equality identifies comment/formatting-only
    edits. SQL fixtures, including their comments and metadata, are never treated
@@ -34,9 +34,12 @@ The GitHub Actions workflow runs regression tests and `make sample` on Linux.
 4. For function-body changes, select tests covering the affected expression,
    falling back to function coverage when needed. Fixture changes select recorded
    readers. Literal changes within existing class assignments use baseline class
-   consumers, including inheritance and cached dialect instances. Module changes,
-   structural edits, syntax errors, unknown files, unsupported patches, and missing
-   coverage fall back to all tests. Newly supplied test IDs remain conservative.
+   consumers, including inheritance and cached dialect instances. For a dictionary edit that preserves every literal key, a build-time index
+   identifies code that reads the values. The analysis follows supported aliases
+   and excludes settings with unresolved consumers. A separate index covers
+   private constants whose readers are confined to their defining module.
+   Unsupported import changes, structural edits, syntax errors, and missing
+   dependency information retain broader coverage. Newly supplied test IDs remain conservative.
    Identity-to-equality edits can skip tests only when every observed baseline
    operand pair was equivalent under known, side-effect-free equality methods.
    Custom equality methods are never invoked by this observer.
@@ -44,8 +47,10 @@ The GitHub Actions workflow runs regression tests and `make sample` on Linux.
    integer milliseconds and the exact 2-second worker overhead. Choose the
    cheapest resulting schedule. An empty selection emits no workers.
 
-Runtime does not execute patched code, access the network, write files, or read
-sample answers. All maps are derived from the pinned baseline, never from patch
+For small groups of dialect tests, the selector can run pytest on a temporary
+copy of the changed modules under `/tmp`. A time budget limits this work. It
+removes a test only after pytest confirms all phases passed. A timeout, failed
+subtest, collection error, or missing report preserves the original selection. All maps are derived from the pinned baseline, never from patch
 identities, edit categories, or known failing-test labels. Sample answers are used
 only by the external scorer. They are excluded from the Docker build context.
 
@@ -55,8 +60,9 @@ only by the external scorer. They are excluded from the Docker build context.
 python3 -m unittest discover -s tests -v
 # In an environment containing the locked dependencies and coverage==7.17.4:
 python tools/build_map.py /path/to/pinned/sqlglot /tmp/dependencies.json
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 SKIP_INTEGRATION=0 python value_index.py /path/to/pinned/sqlglot /tmp/dependencies.json /tmp/runtime-map.json
 python selector.py --source /path/to/pinned/sqlglot \
-  --map /tmp/dependencies.json --data sample > output.jsonl
+  --map /tmp/runtime-map.json --data sample > output.jsonl
 python score.py sample sample/answers.json output.jsonl
 ```
 
@@ -81,16 +87,11 @@ track page. Keep submitted commits publicly available until results are publishe
 Only a successful official run establishes the competition score; local scoring
 reports simulated time, and the server additionally charges container CPU time.
 
-## Optimized local sample result
+## Validation
 
-The optimized selector scores **138.594 simulated seconds, zero misses** on all
-30 supplied sample commits, versus 311.883 seconds for the prior local version.
-Three runs produce identical output. All 18 selector regression tests pass;
-the instrumented baseline passes 1,621 tests and 25,454 subtests.
-See `validation/optimized-results.json` for native CPU measurements.
-
-These are macOS/Python 3.14 development results. Linux/Python 3.13 Docker validation
-has not been performed locally. The earlier 570.1-second official result used a
-different, hidden batch; a sub-150 official score is not guaranteed. No optimized
-code has been pushed or submitted. Upload the whole project, including the new
-`tools/class_usage.py`, `tools/identity_usage.py`, and updated Dockerfile.
+The cached Linux amd64 build completed `make sample` at **105.320 simulated
+seconds with zero missed commits** across the 30 public patches. The preceding
+local image scored 108.347 seconds on those same inputs. The two expensive
+integration-test selections remain because the sample labels record failures.
+The competition adds container CPU time and evaluates a different batch.
+See `validation/value-index-results.json` for the independent comparisons.
