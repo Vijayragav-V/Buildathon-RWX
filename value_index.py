@@ -189,7 +189,19 @@ def build(root, mapping, early):
         return {}
     index = Reads(root, mapping, early)
     data = {f:r for f in set(index.assignments) if (r := index.dictionary(f)) is not None}
-    return {'dictionary_values': data, 'private_globals': index.globals()}
+    runtime_bodies = {}
+    for path in (root / 'sqlglot').rglob('*.py'):
+        file = path.relative_to(root).as_posix()
+        if file not in early:
+            continue
+        for fn in ast.walk(ast.parse(path.read_bytes())):
+            if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)) or fn.decorator_list:
+                continue
+            first = fn.body[0].lineno
+            if first > fn.lineno and early[file].isdisjoint(range(first, fn.end_lineno + 1)):
+                runtime_bodies[f'{file}:{fn.name}:{fn.lineno}'] = True
+    return {'dictionary_values': data, 'private_globals': index.globals(),
+            'runtime_bodies': runtime_bodies}
 
 
 if __name__ == '__main__':

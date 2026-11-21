@@ -47,12 +47,20 @@ The GitHub Actions workflow runs regression tests and `make sample` on Linux.
    integer milliseconds and the exact 2-second worker overhead. Choose the
    cheapest resulting schedule. An empty selection emits no workers.
 
-For small groups of dialect tests, the selector can run pytest on a temporary
-copy of the changed modules under `/tmp`. A time budget limits this work. It
-removes a test only after pytest confirms all phases passed. A timeout, failed
-subtest, collection error, or missing report preserves the original selection. All maps are derived from the pinned baseline, never from patch
-identities, edit categories, or known failing-test labels. Sample answers are used
-only by the external scorer. They are excluded from the Docker build context.
+For a combined class-setting and method-body edit, the selector unions the
+setting's consumers with whole-method coverage. This requires an unchanged
+method signature, no decorators or generators, and evidence that the pinned
+method body did not execute during module import or test collection.
+
+For cheap groups across test modules, the selector compares the cost of the
+original schedule with the best possible schedule after verification. It uses
+build-time pytest collection measurements and the supplied test durations to
+prioritize probes within batch CPU and wall-time budgets. Each probe starts
+with fresh test state, applies every supported edit to an isolated checkout,
+and keeps the native pytest collection order. A test can be removed after
+its setup, call and teardown pass. Collection errors, timeouts and shared
+teardown failures discard the probe. Unknown tests retain their selections.
+Sample answers and validation inputs are excluded from the Docker build.
 
 ## Local development without Docker
 
@@ -89,9 +97,8 @@ reports simulated time, and the server additionally charges container CPU time.
 
 ## Validation
 
-The cached Linux amd64 build completed `make sample` at **105.320 simulated
-seconds with zero missed commits** across the 30 public patches. The preceding
-local image scored 108.347 seconds on those same inputs. The two expensive
-integration-test selections remain because the sample labels record failures.
-The competition adds container CPU time and evaluates a different batch.
-See `validation/value-index-results.json` for the independent comparisons.
+The Linux amd64 image completed `make sample` at **103.127 simulated seconds
+with zero missed commits** across 30 public patches. The prior submitted
+version scored 105.320 simulated seconds locally and 332.7 seconds on the
+official hidden batch. Paired measurements, including CPU and independent
+full-suite failure labels, are summarized in `validation/replay-results.json`.

@@ -13,10 +13,10 @@ PIN = 'eb11aec4be8cb2122afe713a4816662c3f0fb2fa'
 HUNK = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@')
 
 
-def schedule(tests):
+def best_schedule(tests):
     """Try every allowed worker count with integer-millisecond LPT scheduling."""
     if not tests:
-        return []
+        return 0, []
     ordered = sorted(tests, key=lambda t: (-math.floor(t['seconds'] * 1000 + .5), t['number']))
     best = None
     for count in range(1, min(8, len(tests)) + 1):
@@ -29,7 +29,11 @@ def schedule(tests):
         key = (max(loads) + 2000 * len(workers), len(workers))
         if best is None or key < best[0]:
             best = key, workers
-    return best[1]
+    return best[0][0], best[1]
+
+
+def schedule(tests):
+    return best_schedule(tests)[1]
 
 
 def parse_patch(text):
@@ -177,7 +181,7 @@ def same_header(old, new, omit):
     return all(freeze(getattr(old, key)) == freeze(getattr(new, key)) for key in old._fields if key != omit)
 
 
-def changed_classes(before, after, prefix=''):
+def changed_classes(before, after, bodies, prefix=''):
     if len(before) != len(after):
         return None
     changed = set()
@@ -187,10 +191,17 @@ def changed_classes(before, after, prefix=''):
         if isinstance(old, ast.ClassDef) and isinstance(new, ast.ClassDef):
             if not same_header(old, new, 'body'):
                 return None
-            inner = changed_classes(old.body, new.body, prefix + old.name + '.')
+            inner = changed_classes(old.body, new.body, bodies, prefix + old.name + '.')
             if inner is None:
                 return None
             changed.update(inner)
+        elif isinstance(old, (ast.FunctionDef, ast.AsyncFunctionDef)) and same_header(old, new, 'body'):
+            # A generator changes its caller's result type before its body runs.
+            if (old.decorator_list or ast.get_docstring(old) != ast.get_docstring(new)
+                    or any(isinstance(n, (ast.Yield, ast.YieldFrom))
+                           for fn in (old, new) for n in ast.walk(fn))):
+                return None
+            bodies.append(old)
         elif isinstance(old, (ast.Assign, ast.AnnAssign)) and literal_shape(old) == literal_shape(new) and safe_literal_edit(old, new):
             if not same_header(old, new, 'value'):
                 return None
@@ -275,11 +286,12 @@ class Selector:
         child = self.translate(self.mapping.get('child_imports', {}).get(filename, ()))
         if observed_equivalent(tree, after, filename, self.mapping.get("identity", {})):
             return self.uncertain | child
+        selected = set(self.uncertain)
         if import_structure(tree) != import_structure(after):
-            classes = changed_classes(tree.body, after.body)
+            bodies = []
+            classes = changed_classes(tree.body, after.body, bodies)
             if not classes:
                 return self.all
-            selected = set(self.uncertain)
             selected.update(child)
             for cls, field, dictionary in classes:
                 if not cls:
@@ -296,10 +308,20 @@ class Selector:
                 if attribute_users is not None:
                     users = set(users).intersection(attribute_users)
                 selected.update(self.translate(users))
+            if not bodies:
+                return selected
+            # Keep every known caller of each changed body. The declaration
+            # dependency above already covers tests influenced by the other edit.
+            coverage = self.mapping['lines'].get(filename, {})
+            for body in bodies:
+                hits = {i for n in range(body.lineno, body.end_lineno + 1)
+                        for i in coverage.get(str(n), ())}
+                if not hits or f'{filename}:{body.name}:{body.lineno}' not in self.mapping.get('runtime_bodies', {}):
+                    return self.all
+                selected.update(self.translate(hits))
             return selected
         lines = self.mapping['lines'].get(filename, {})
         scopes = [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda))]
-        selected = set()
         entered = self.mapping.get('entered', {}).get(filename)
         for lineno in changed:
             containing = [n for n in scopes if n.lineno <= lineno <= n.end_lineno]
@@ -356,11 +378,16 @@ def main():
     patches = sorted((args.data / 'commits').glob('*.patch'))
     budget = ReplayBudget(len(patches))
     by_number = {t['number']: t for t in tests}
+    pending = []
     for patch in patches:
         change = patch.read_text()
         chosen = selector.select(change) if selector else set(by_number)
-        if selector:
-            chosen = budget.refine(selector, chosen, change, by_number)
+        proposal = budget.proposal(selector, chosen, by_number) if selector else None
+        priority = proposal[0] if proposal else 0.
+        pending.append((-priority, patch.name, patch, change, chosen, proposal))
+    for _, _, patch, change, chosen, proposal in sorted(pending):
+        if proposal:
+            chosen = budget.refine(selector, chosen, change, by_number, proposal)
         workers = schedule([t for t in tests if t['number'] in chosen])
         print(json.dumps({'commit': patch.stem, 'workers': workers}, separators=(',', ':')))
 

@@ -1,0 +1,225 @@
+{
+  "baseline_commit": "2ec319ff5e2b2ee4e9088fda24e95efa98948e6e",
+  "environment": "Local linux/amd64 Docker under Makefile scorer limits. Cgroup CPU delta during selector entry through completion includes descendant processes. Estimated totals omit container and interpreter entry/exit overhead. Three paired runs per image and dataset.",
+  "independent_labels": {
+    "source": "Pinned full-suite pytest on macOS, grouped by parent node ID including failed subtests. The two combined-edit patches were independently checked by the full suite in the Linux submission image.",
+    "composition": "Five previously labelled patches, four fresh standalone/multifile cases, two same-file combined edits, three random dialect flag changes (seed 20261121).",
+    "linux_confirmed": [
+      "clickhouse_pair",
+      "duckdb_pair"
+    ],
+    "failures_per_patch": {
+      "escape_hex": 0,
+      "interval_aliases": 1,
+      "duckdb_byte_escapes": 0,
+      "bracket_origin": 2,
+      "cross_dialect": 5,
+      "cte_length": 0,
+      "teradata_render": 1,
+      "drill_flag": 0,
+      "compound": 2,
+      "clickhouse_pair": 2,
+      "duckdb_pair": 1,
+      "blind_0": 1,
+      "blind_1": 3,
+      "blind_2": 2
+    }
+  },
+  "regressions": 25,
+  "sample": {
+    "base": {
+      "median_total_run": {
+        "simulated_s": 105.32,
+        "cpu_s": 9.056,
+        "estimated_total_s": 114.376,
+        "probe_cpu_s": 8.099,
+        "wall_s": 9.225,
+        "probes": 7,
+        "misses": []
+      },
+      "identical_outputs": true,
+      "runs": [
+        {
+          "simulated_s": 105.32,
+          "cpu_s": 9.056,
+          "estimated_total_s": 114.376,
+          "probe_cpu_s": 8.099,
+          "wall_s": 9.225,
+          "probes": 7,
+          "misses": [],
+          "output_sha256": "42a2e2cca72fb0456e1e824726588c1788fe4fda78c565baf8c8cf8eb0a2a63d"
+        },
+        {
+          "simulated_s": 105.32,
+          "cpu_s": 10.116,
+          "estimated_total_s": 115.436,
+          "probe_cpu_s": 9.012,
+          "wall_s": 10.273,
+          "probes": 7,
+          "misses": [],
+          "output_sha256": "42a2e2cca72fb0456e1e824726588c1788fe4fda78c565baf8c8cf8eb0a2a63d"
+        },
+        {
+          "simulated_s": 105.32,
+          "cpu_s": 8.039,
+          "estimated_total_s": 113.359,
+          "probe_cpu_s": 7.193,
+          "wall_s": 8.341,
+          "probes": 7,
+          "misses": [],
+          "output_sha256": "42a2e2cca72fb0456e1e824726588c1788fe4fda78c565baf8c8cf8eb0a2a63d"
+        }
+      ]
+    },
+    "opt": {
+      "median_total_run": {
+        "simulated_s": 103.127,
+        "cpu_s": 5.785,
+        "estimated_total_s": 108.912,
+        "probe_cpu_s": 4.737,
+        "wall_s": 5.866,
+        "probes": 8,
+        "misses": []
+      },
+      "identical_outputs": true,
+      "runs": [
+        {
+          "simulated_s": 103.127,
+          "cpu_s": 5.785,
+          "estimated_total_s": 108.912,
+          "probe_cpu_s": 4.737,
+          "wall_s": 5.866,
+          "probes": 8,
+          "misses": [],
+          "output_sha256": "cf83878a23af11f247222c0d631d563d1999bf8b9e972c2c4c718e47ca93aae5"
+        },
+        {
+          "simulated_s": 103.127,
+          "cpu_s": 7.754,
+          "estimated_total_s": 110.881,
+          "probe_cpu_s": 6.753,
+          "wall_s": 7.864,
+          "probes": 8,
+          "misses": [],
+          "output_sha256": "cf83878a23af11f247222c0d631d563d1999bf8b9e972c2c4c718e47ca93aae5"
+        },
+        {
+          "simulated_s": 103.127,
+          "cpu_s": 5.359,
+          "estimated_total_s": 108.486,
+          "probe_cpu_s": 4.557,
+          "wall_s": 5.458,
+          "probes": 8,
+          "misses": [],
+          "output_sha256": "cf83878a23af11f247222c0d631d563d1999bf8b9e972c2c4c718e47ca93aae5"
+        }
+      ]
+    }
+  },
+  "paired": {
+    "base": {
+      "median_total_run": {
+        "simulated_s": 168.231,
+        "cpu_s": 4.696,
+        "estimated_total_s": 172.927,
+        "probe_cpu_s": 3.939,
+        "wall_s": 4.767,
+        "probes": 3,
+        "misses": []
+      },
+      "identical_outputs": true,
+      "runs": [
+        {
+          "simulated_s": 168.231,
+          "cpu_s": 4.874,
+          "estimated_total_s": 173.105,
+          "probe_cpu_s": 4.104,
+          "wall_s": 4.957,
+          "probes": 3,
+          "misses": [],
+          "output_sha256": "2e823956401b4100379bccf42602076662681420c761684068c634c3b35d2314"
+        },
+        {
+          "simulated_s": 168.231,
+          "cpu_s": 4.573,
+          "estimated_total_s": 172.804,
+          "probe_cpu_s": 3.777,
+          "wall_s": 4.608,
+          "probes": 3,
+          "misses": [],
+          "output_sha256": "2e823956401b4100379bccf42602076662681420c761684068c634c3b35d2314"
+        },
+        {
+          "simulated_s": 168.231,
+          "cpu_s": 4.696,
+          "estimated_total_s": 172.927,
+          "probe_cpu_s": 3.939,
+          "wall_s": 4.767,
+          "probes": 3,
+          "misses": [],
+          "output_sha256": "2e823956401b4100379bccf42602076662681420c761684068c634c3b35d2314"
+        }
+      ]
+    },
+    "opt": {
+      "median_total_run": {
+        "simulated_s": 124.434,
+        "cpu_s": 3.76,
+        "estimated_total_s": 128.194,
+        "probe_cpu_s": 3.052,
+        "wall_s": 3.791,
+        "probes": 3,
+        "misses": []
+      },
+      "identical_outputs": true,
+      "runs": [
+        {
+          "simulated_s": 124.434,
+          "cpu_s": 4.46,
+          "estimated_total_s": 128.894,
+          "probe_cpu_s": 3.26,
+          "wall_s": 4.506,
+          "probes": 3,
+          "misses": [],
+          "output_sha256": "f0f9a868fef5392a5dec9a3e3cbe0dac2b4a5ac9a73dbca44b7e0964560542b2"
+        },
+        {
+          "simulated_s": 124.434,
+          "cpu_s": 3.377,
+          "estimated_total_s": 127.811,
+          "probe_cpu_s": 2.692,
+          "wall_s": 3.41,
+          "probes": 3,
+          "misses": [],
+          "output_sha256": "f0f9a868fef5392a5dec9a3e3cbe0dac2b4a5ac9a73dbca44b7e0964560542b2"
+        },
+        {
+          "simulated_s": 124.434,
+          "cpu_s": 3.76,
+          "estimated_total_s": 128.194,
+          "probe_cpu_s": 3.052,
+          "wall_s": 3.791,
+          "probes": 3,
+          "misses": [],
+          "output_sha256": "f0f9a868fef5392a5dec9a3e3cbe0dac2b4a5ac9a73dbca44b7e0964560542b2"
+        }
+      ]
+    }
+  },
+  "independent_patch_sha256": {
+    "blind_0": "52a691f6118c01e317e7fc5c3ccf8f99048daec5db7fcaae53fd8fc63d4a6cb0",
+    "blind_1": "ce3baba644612fb69b34691769f0babdcdc22ef3f21b065aaeb7ee37d8a5462f",
+    "blind_2": "23089bb88c6dc668f88399823cc5a585926b2f04e2f9ff66dad70fb3f35979ca",
+    "bracket_origin": "02c33949f93beddaa016a007b33b3b6f057883b2561b5917b8b97560f92ef7ac",
+    "clickhouse_pair": "05fd91b0ab7ee9733cc7e09a73f1b3f2cc993aab45e4322de16e7c701c3155d8",
+    "compound": "fd3f5641749bd345f45e77f7e867b211bbfbe6449f6899f8c16c740c817e376d",
+    "cross_dialect": "273acf9900bbd7e607a7aef431757950363b9b58037aa7dc05ff95196032e3ee",
+    "cte_length": "18f968aa30e97d7ba84baf6bed20cd85f096993cbd2057117591a7e94e262afb",
+    "drill_flag": "deb8ff9adaa532cede0a05414a23c07202c60ed0e49f4747b648266846b88790",
+    "duckdb_byte_escapes": "e1b76b8323333a7d338bc8d6f6a8074c359bd5797ac5d51ea142f6ccc941cf2b",
+    "duckdb_pair": "011ccc461043d6dddc4d0fb6156d9e50c87d49dabe49bea78edde969df2c3ebe",
+    "escape_hex": "c6a692ea17f742950508c8f1594c75f1aa38af6db1fc59f531982517362b688e",
+    "interval_aliases": "c42027acf46334a90fda2bed01ba0a5663c0e7f342086f55547e11f72af75b46",
+    "teradata_render": "5a918df554c8b1218856cf695673e1fa758662b5dd65b43a1c64f630478f827f"
+  }
+}

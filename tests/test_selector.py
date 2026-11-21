@@ -128,6 +128,20 @@ class SelectorTests(unittest.TestCase):
         self.assertEqual(self.selector.select(patch(old, old.replace('old', 'new'))), {7})
         self.assertEqual(self.selector.select(patch(old, old.replace('str', 'float'))), {7, 19})
 
+    def test_composite_declaration_and_method_preserves_both_dependencies(self):
+        original = 'class A:\n    FLAG = 1\n    def f(self):\n        return 1\n'
+        (self.root/'sqlglot/example.py').write_text(original)
+        self.mapping['lines']['sqlglot/example.py'] = {'4': [1]}
+        self.mapping['classes'] = {'sqlglot/example.py:A': [0]}
+        self.mapping['runtime_bodies'] = {'sqlglot/example.py:f:3': True}
+        self.selector.all.add(40)
+        change = patch(original, original.replace('= 1', '= 2').replace('return 1', 'return 2'))
+        self.assertEqual(self.selector.select(change), {7, 19})
+        self.mapping['runtime_bodies'].clear()
+        self.assertEqual(self.selector.select(change), {7, 19, 40})
+        self.assertEqual(self.selector.select(patch(original, original.replace('= 1', '= 2')
+                                                   .replace('f(self)', 'f(self, x)'))), {7, 19, 40})
+
     def test_schedule_accounts_for_worker_overhead(self):
         self.assertEqual(len(schedule(self.tests)), 1)
         tests = [{'number': i, 'seconds': 10} for i in range(8)]
