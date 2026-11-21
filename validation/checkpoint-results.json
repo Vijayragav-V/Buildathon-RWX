@@ -1,0 +1,100 @@
+{
+  "environment": "Linux amd64 Python 3.13, scorer Docker limits. Batch costs are simulated time plus measured selector process-tree CPU. Public 30, prior independent 14, prior import mutations 2, fresh independent 5. Synthetic witnesses scored separately.",
+  "witnesses": [
+    "direct failing [1] old [] fixed [0, 1, 2]",
+    "factory failing [2] old [0] fixed [0, 1, 2]"
+  ],
+  "fresh_full_suite_failures": {
+    "factory_negate": 0,
+    "class_order": 1,
+    "return_tail": 0,
+    "active_tail": 229,
+    "generator_tail": 0
+  },
+  "batches": {
+    "base": [
+      {
+        "batch": "sample",
+        "sim": 103.127,
+        "cpu": 5.039,
+        "net": 108.166,
+        "misses": 0,
+        "identical": true,
+        "runs": 2,
+        "probe_cpu": 4.291
+      },
+      {
+        "batch": "held",
+        "sim": 122.971,
+        "cpu": 4.818,
+        "net": 127.789,
+        "misses": 0,
+        "identical": true,
+        "runs": 2,
+        "probe_cpu": 4.167
+      },
+      {
+        "batch": "imports",
+        "sim": 73.634,
+        "cpu": 0.421,
+        "net": 74.055,
+        "misses": 0,
+        "identical": true,
+        "runs": 2,
+        "probe_cpu": 0.0
+      },
+      {
+        "batch": "fresh",
+        "sim": 126.12,
+        "cpu": 0.448,
+        "net": 126.568,
+        "misses": 0,
+        "identical": true,
+        "runs": 2,
+        "probe_cpu": 0.0
+      }
+    ],
+    "A": [
+      {
+        "batch": "sample",
+        "sim": 177.358,
+        "cpu": 3.805,
+        "net": 181.163,
+        "misses": 0,
+        "identical": true,
+        "runs": 2,
+        "probe_cpu": 3.021
+      },
+      {
+        "batch": "held",
+        "sim": 190.114,
+        "cpu": 2.005,
+        "net": 192.119,
+        "misses": 0,
+        "identical": true,
+        "runs": 2,
+        "probe_cpu": 1.301
+      },
+      {
+        "batch": "imports",
+        "sim": 73.634,
+        "cpu": 0.454,
+        "net": 74.088,
+        "misses": 0,
+        "identical": true,
+        "runs": 2,
+        "probe_cpu": 0.0
+      },
+      {
+        "batch": "fresh",
+        "sim": 184.085,
+        "cpu": 0.451,
+        "net": 184.536,
+        "misses": 0,
+        "identical": true,
+        "runs": 2,
+        "probe_cpu": 0.0
+      }
+    ]
+  }
+}

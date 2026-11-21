@@ -127,27 +127,27 @@ def literal_shape(node):
     return node
 
 
-def safe_literal_edit(old, new, inside_call=False):
+def safe_literal_edit(old, new):
     """Do not narrow edits that can change import-time arithmetic or call arguments."""
     if ast.dump(old) == ast.dump(new):
         return True
     if type(old) is not type(new):
         return False
     if isinstance(old, ast.Constant):
-        return type(old.value) is type(new.value) and (not inside_call or isinstance(old.value, bool))
-    if isinstance(old, (ast.BinOp, ast.BoolOp, ast.Compare, ast.IfExp, ast.Subscript)):
+        return type(old.value) is type(new.value)
+    if isinstance(old, (ast.Call, ast.BinOp, ast.BoolOp, ast.Compare, ast.IfExp, ast.Subscript)):
         return False
     for field in old._fields:
         a, b = getattr(old, field), getattr(new, field)
         if isinstance(a, ast.AST):
-            if not safe_literal_edit(a, b, inside_call or isinstance(old, ast.Call)):
+            if not safe_literal_edit(a, b):
                 return False
         elif isinstance(a, list):
             if len(a) != len(b):
                 return False
             for x, y in zip(a, b):
                 if isinstance(x, ast.AST):
-                    if not safe_literal_edit(x, y, inside_call or isinstance(old, ast.Call)):
+                    if not safe_literal_edit(x, y):
                         return False
                 elif x != y:
                     return False
@@ -301,14 +301,14 @@ class Selector:
                         return self.all
                     selected.update(self.translate(readers))
                     continue
-                users = self.mapping.get('classes', {}).get(filename + ':' + cls)
-                if not users:
+                # Class initialization and direct class-field reads are independent.
+                # A cached instance or a classmethod can read a setting without
+                # constructing the class in the current test.
+                index = 'dictionary_values' if dictionary else 'scalar_readers'
+                readers = self.mapping.get(index, {}).get(field)
+                if readers is None:
                     return self.all
-                index = 'dictionary_values' if dictionary else 'attributes'
-                attribute_users = self.mapping.get(index, {}).get(field)
-                if attribute_users is not None:
-                    users = set(users).intersection(attribute_users)
-                selected.update(self.translate(users))
+                selected.update(self.translate(readers))
             if not bodies:
                 return selected
             # Keep every known caller of each changed body. The declaration

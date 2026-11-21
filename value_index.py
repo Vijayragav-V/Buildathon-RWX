@@ -189,6 +189,17 @@ def build(root, mapping, early):
         return {}
     index = Reads(root, mapping, early)
     data = {f:r for f in set(index.assignments) if (r := index.dictionary(f)) is not None}
+    scalar_readers = {}
+    for field in mapping.get('attributes', {}):
+        readers = set()
+        for file, node, parents in index.uses[field]:
+            site = index.site(file, node, parents)
+            if not isinstance(node, ast.Attribute) or site is None:
+                break
+            readers.update(site)
+        else:
+            if readers:
+                scalar_readers[field] = sorted(readers)
     runtime_bodies = {}
     for path in (root / 'sqlglot').rglob('*.py'):
         file = path.relative_to(root).as_posix()
@@ -201,7 +212,7 @@ def build(root, mapping, early):
             if first > fn.lineno and early[file].isdisjoint(range(first, fn.end_lineno + 1)):
                 runtime_bodies[f'{file}:{fn.name}:{fn.lineno}'] = True
     return {'dictionary_values': data, 'private_globals': index.globals(),
-            'runtime_bodies': runtime_bodies}
+            'runtime_bodies': runtime_bodies, 'scalar_readers': scalar_readers}
 
 
 if __name__ == '__main__':

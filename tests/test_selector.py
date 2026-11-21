@@ -108,11 +108,12 @@ class SelectorTests(unittest.TestCase):
         self.mapping['import_calls'][name] = ['f:1']
         self.assertEqual(self.selector.select(patch(old, old.replace(' is ', ' == '))), {7, 19})
 
-    def test_class_literal_uses_recorded_class_consumers(self):
+    def test_class_literal_includes_readers_without_constructor(self):
         old = 'class Dialect:\n    FLAG = True\n'
         (self.root/'sqlglot/example.py').write_text(old)
         self.mapping['classes'] = {'sqlglot/example.py:Dialect': [1]}
-        self.assertEqual(self.selector.select(patch(old, old.replace('True', 'False'))), {19})
+        self.mapping['scalar_readers'] = {'FLAG': [0]}
+        self.assertEqual(self.selector.select(patch(old, old.replace('True', 'False'))), {7})
 
     def test_unobserved_class_falls_back(self):
         old = 'class Dialect:\n    FLAG = True\n'
@@ -149,6 +150,13 @@ class SelectorTests(unittest.TestCase):
         self.assertTrue(comparison_equivalent(None, None))
         self.assertFalse(comparison_equivalent(''.join(['equal', ' value']), ''.join(['equal', ' value'])))
 
+    def test_class_factory_arguments_have_import_time_effects(self):
+        old = 'class A:\n    FLAG = initialize(strict=True)\n'
+        (self.root/'sqlglot/example.py').write_text(old)
+        self.mapping['classes'] = {'sqlglot/example.py:A': [0]}
+        self.mapping['scalar_readers'] = {'FLAG': [0]}
+        self.assertEqual(self.selector.select(patch(old, old.replace('True', 'False'))), {7, 19})
+
     def test_class_import_arithmetic_falls_back(self):
         old = 'class Dialect:\n    FLAG = 1 / 2\n'
         (self.root/'sqlglot/example.py').write_text(old)
@@ -173,7 +181,7 @@ class SelectorTests(unittest.TestCase):
         original = 'class A:\n    FLAG = 1\n    def f(self):\n        return 1\n'
         (self.root/'sqlglot/example.py').write_text(original)
         self.mapping['lines']['sqlglot/example.py'] = {'4': [1]}
-        self.mapping['classes'] = {'sqlglot/example.py:A': [0]}
+        self.mapping['scalar_readers'] = {'FLAG': [0]}
         self.mapping['runtime_bodies'] = {'sqlglot/example.py:f:3': True}
         self.selector.all.add(40)
         change = patch(original, original.replace('= 1', '= 2').replace('return 1', 'return 2'))
