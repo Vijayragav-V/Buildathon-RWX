@@ -220,6 +220,31 @@ def changed_classes(before, after, bodies, prefix=''):
     return changed
 
 
+def deferred_changes(old, new, filename, index, readers):
+    if type(old) is not type(new):
+        return False
+    if isinstance(old, ast.Call):
+        hits = index.get(f'{filename}:{old.lineno}:{old.col_offset}')
+        if hits is not None and ast.dump(old.func) == ast.dump(new.func):
+            old_args = old.args + [kw.value for kw in old.keywords]
+            new_args = new.args + [kw.value for kw in new.keywords]
+            if (len(old.args) == len(new.args) and [k.arg for k in old.keywords] == [k.arg for k in new.keywords]
+                    and all(ast.dump(a) == ast.dump(b) or
+                            isinstance(a, ast.Constant) and isinstance(b, ast.Constant)
+                            and type(a.value) is bool and type(b.value) is bool
+                            for a, b in zip(old_args, new_args))):
+                if ast.dump(old) != ast.dump(new):
+                    readers.update(hits)
+                return True
+    if isinstance(old, ast.AST):
+        return all(deferred_changes(getattr(old, key), getattr(new, key), filename, index, readers)
+                   for key in old._fields)
+    if isinstance(old, list):
+        return len(old) == len(new) and all(deferred_changes(a, b, filename, index, readers)
+                                            for a, b in zip(old, new))
+    return old == new
+
+
 def observed_equivalent(old, new, filename, observations):
     if isinstance(old, ast.Compare) and isinstance(new, ast.Compare):
         if len(old.ops) == len(new.ops) == 1:
@@ -266,6 +291,20 @@ class Selector:
             self.cache[filename] = text, tree
         return self.cache[filename]
 
+    def body_users(self, filename, bodies):
+        coverage = self.mapping['lines'].get(filename, {})
+        users = set()
+        for body in bodies:
+            key = f'{filename}:{body.name}:{body.lineno}'
+            if key not in self.mapping.get('runtime_bodies', {}):
+                return self.all
+            hits = {i for line in range(body.lineno, body.end_lineno + 1)
+                    for i in coverage.get(str(line), ())}
+            if not hits:
+                return self.all
+            users.update(self.translate(hits))
+        return users
+
     def select_section(self, section):
         filename = section['old']
         if not filename or filename != section['new'] or filename == '/dev/null':
@@ -292,6 +331,9 @@ class Selector:
             bodies = []
             classes = changed_classes(tree.body, after.body, bodies)
             if not classes:
+                readers = set()
+                if deferred_changes(tree, after, filename, self.mapping.get('deferred_calls', {}), readers):
+                    return selected | child | self.translate(readers)
                 return self.all
             selected.update(child)
             for cls, field, dictionary in classes:
@@ -309,18 +351,7 @@ class Selector:
                 if readers is None:
                     return self.all
                 selected.update(self.translate(readers))
-            if not bodies:
-                return selected
-            # Keep every known caller of each changed body. The declaration
-            # dependency above already covers tests influenced by the other edit.
-            coverage = self.mapping['lines'].get(filename, {})
-            for body in bodies:
-                hits = {i for n in range(body.lineno, body.end_lineno + 1)
-                        for i in coverage.get(str(n), ())}
-                if not hits or f'{filename}:{body.name}:{body.lineno}' not in self.mapping.get('runtime_bodies', {}):
-                    return self.all
-                selected.update(self.translate(hits))
-            return selected
+            return selected | self.body_users(filename, bodies)
         lines = self.mapping['lines'].get(filename, {})
         scopes = [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda))]
         entered = self.mapping.get('entered', {}).get(filename)
@@ -328,6 +359,12 @@ class Selector:
         for lineno in changed:
             containing = [n for n in scopes if n.lineno <= lineno <= n.end_lineno]
             if not containing:
+                # An insertion can straddle the old final statement and a blank
+                # line outside its body. Attribute it using the complete new AST.
+                bodies = []
+                declarations = changed_classes(tree.body, after.body, bodies)
+                if declarations == set() and bodies:
+                    return selected | child | self.body_users(filename, bodies)
                 return self.all
             # An import/collection call can initialize shared objects before
             # any test owns a coverage context. Narrow line hits cannot bound

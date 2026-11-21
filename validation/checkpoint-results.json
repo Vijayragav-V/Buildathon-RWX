@@ -95,6 +95,96 @@
         "runs": 2,
         "probe_cpu": 0.0
       }
+    ],
+    "B": [
+      {
+        "batch": "sample",
+        "sim": 140.541,
+        "cpu": 3.649,
+        "net": 144.19,
+        "misses": 0,
+        "identical": true,
+        "runs": 2,
+        "probe_cpu": 2.979
+      },
+      {
+        "batch": "held",
+        "sim": 190.114,
+        "cpu": 1.649,
+        "net": 191.763,
+        "misses": 0,
+        "identical": true,
+        "runs": 2,
+        "probe_cpu": 1.037
+      },
+      {
+        "batch": "imports",
+        "sim": 73.634,
+        "cpu": 0.394,
+        "net": 74.028,
+        "misses": 0,
+        "identical": true,
+        "runs": 2,
+        "probe_cpu": 0.0
+      },
+      {
+        "batch": "fresh",
+        "sim": 127.65,
+        "cpu": 0.443,
+        "net": 128.093,
+        "misses": 0,
+        "identical": true,
+        "runs": 2,
+        "probe_cpu": 0.0
+      }
+    ],
+    "static": [
+      {
+        "batch": "sample",
+        "sim": 151.906,
+        "cpu": 0.63,
+        "net": 152.536,
+        "misses": 0,
+        "identical": true,
+        "runs": 2,
+        "probe_cpu": 0.0
+      },
+      {
+        "batch": "held",
+        "sim": 190.114,
+        "cpu": 0.594,
+        "net": 190.708,
+        "misses": 0,
+        "identical": true,
+        "runs": 2,
+        "probe_cpu": 0.0
+      },
+      {
+        "batch": "imports",
+        "sim": 73.634,
+        "cpu": 0.393,
+        "net": 74.027,
+        "misses": 0,
+        "identical": true,
+        "runs": 2,
+        "probe_cpu": 0.0
+      },
+      {
+        "batch": "fresh",
+        "sim": 127.65,
+        "cpu": 0.439,
+        "net": 128.089,
+        "misses": 0,
+        "identical": true,
+        "runs": 2,
+        "probe_cpu": 0.0
+      }
     ]
+  },
+  "decision_cost_at_A_s": {
+    "missing_class_readers": 147.268,
+    "old_line_outside_body": 110.451,
+    "unsupported_declaration": 73.634,
+    "import_time_function": 73.634
   }
 }

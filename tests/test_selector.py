@@ -191,6 +191,34 @@ class SelectorTests(unittest.TestCase):
         self.assertEqual(self.selector.select(patch(original, original.replace('= 1', '= 2')
                                                    .replace('f(self)', 'f(self, x)'))), {7, 19, 40})
 
+    def test_tail_insertion_uses_whole_runtime_body(self):
+        self.mapping['runtime_bodies'] = {'sqlglot/example.py:f:3': True}
+        change = patch(self.source, self.source.replace('    return 0\n', '    return 0\n    return 5\n'))
+        self.assertEqual(self.selector.select(change), {7})
+        self.mapping['runtime_bodies'].clear()
+        self.assertEqual(self.selector.select(change), {7, 19})
+        yield_change = patch(self.source, self.source.replace('    return 0\n', '    return 0\n    yield 5\n'))
+        self.mapping['runtime_bodies'] = {'sqlglot/example.py:f:3': True}
+        self.assertEqual(self.selector.select(yield_change), {7, 19})
+
+    def test_deferred_factory_requires_verified_site_and_same_call(self):
+        old = 'class A:\n    TABLE = {"k": build(True)}\n'
+        (self.root/'sqlglot/example.py').write_text(old)
+        change = patch(old, old.replace('True', 'False'))
+        self.assertEqual(self.selector.select(change), {7, 19})
+        self.mapping['deferred_calls'] = {'sqlglot/example.py:2:18': [0]}
+        self.assertEqual(self.selector.select(change), {7})
+        for new in (old.replace('build', 'other'), old.replace('True', '0'), old.replace('"k"', '"q"')):
+            self.assertEqual(self.selector.select(patch(old, new)), {7, 19})
+
+    def test_side_effect_or_eager_callback_default_disallows_factory(self):
+        import ast
+        from closure_index import captures_only
+        for body in ['seen.append(flag)\n return lambda: flag',
+                     'def cb(value=touch(flag)): return value\n return cb']:
+            tree = ast.parse('def factory(flag):\n '+body+'\n')
+            self.assertIsNone(captures_only(tree.body[0]))
+
     def test_schedule_accounts_for_worker_overhead(self):
         self.assertEqual(len(schedule(self.tests)), 1)
         tests = [{'number': i, 'seconds': 10} for i in range(8)]
