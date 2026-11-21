@@ -1,0 +1,7 @@
+.git
+sample
+__pycache__
+.pytest_cache
+output.jsonl
+validation
+*.zip

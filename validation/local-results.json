@@ -1,0 +1,37 @@
+{
+  "environment": "macOS arm64, Python 3.14.3",
+  "container_validated": false,
+  "baseline_collection": "1621 passed, 25454 subtests passed",
+  "regression_tests": 11,
+  "starter": {
+    "ok": true,
+    "simulated_milliseconds": 1210470,
+    "misses": 0
+  },
+  "runs": [
+    {
+      "ok": true,
+      "simulated_milliseconds": 311883,
+      "misses": 0,
+      "cpu_seconds": 0.343564,
+      "wall_seconds": 0.3545764589944156,
+      "stdout_bytes": 30720
+    },
+    {
+      "ok": true,
+      "simulated_milliseconds": 311883,
+      "misses": 0,
+      "cpu_seconds": 0.36629500000000004,
+      "wall_seconds": 0.3833092089917045,
+      "stdout_bytes": 30720
+    },
+    {
+      "ok": true,
+      "simulated_milliseconds": 311883,
+      "misses": 0,
+      "cpu_seconds": 0.3953250000000002,
+      "wall_seconds": 0.4172859169921139,
+      "stdout_bytes": 30720
+    }
+  ]
+}
