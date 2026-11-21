@@ -284,10 +284,11 @@ class Selector:
         if ast.dump(tree, include_attributes=False) == ast.dump(after, include_attributes=False):
             return set()
         child = self.translate(self.mapping.get('child_imports', {}).get(filename, ()))
-        if observed_equivalent(tree, after, filename, self.mapping.get("identity", {})):
-            return self.uncertain | child
+        equivalent = observed_equivalent(tree, after, filename, self.mapping.get("identity", {}))
         selected = set(self.uncertain)
         if import_structure(tree) != import_structure(after):
+            if equivalent:
+                return selected | child
             bodies = []
             classes = changed_classes(tree.body, after.body, bodies)
             if not classes:
@@ -323,11 +324,29 @@ class Selector:
         lines = self.mapping['lines'].get(filename, {})
         scopes = [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda))]
         entered = self.mapping.get('entered', {}).get(filename)
+        early = self.mapping.get('import_calls', {}).get(filename)
         for lineno in changed:
             containing = [n for n in scopes if n.lineno <= lineno <= n.end_lineno]
             if not containing:
                 return self.all
+            # An import/collection call can initialize shared objects before
+            # any test owns a coverage context. Narrow line hits cannot bound
+            # its consumers. Include enclosing scopes when a line is ambiguous.
             scope = min(containing, key=lambda n: n.end_lineno - n.lineno)
+            # Import-time factories often define callbacks without calling them.
+            # A lambda boundary can share its line with the containing expression.
+            ambiguous = isinstance(scope, ast.Lambda) and lineno in (scope.lineno, scope.end_lineno)
+            for fn in containing if ambiguous else (scope,):
+                name = '<lambda>' if isinstance(fn, ast.Lambda) else fn.name
+                first = min([fn.lineno] + [d.lineno for d in getattr(fn, 'decorator_list', ())])
+                if early is None:
+                    if f'{filename}:{name}:{fn.lineno}' not in self.mapping.get('runtime_bodies', {}):
+                        return self.all
+                elif f'{name}:{first}' in early:
+                    return self.all
+            if equivalent:
+                selected.update(child)
+                continue
             if not isinstance(scope, ast.Lambda) and lineno < scope.body[0].lineno:
                 return self.all
             if entered is not None and isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef)):

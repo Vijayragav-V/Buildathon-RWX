@@ -1,0 +1,106 @@
+{
+  "parent": "4eb6180d60635cd090f7e465209dfd183593ccb9",
+  "python": "3.13.18",
+  "regressions_passed": 29,
+  "environment": "Local Linux amd64 Docker under published scoring limits. Three paired runs per batch. CPU is cgroup usage during the selector, including children; the official scorer also charges process entry and exit.",
+  "reproduced": {
+    "paired_quotes": {
+      "full_suite_failing_tests": 62,
+      "patch_sha256": "674c2ab0d2fb845cd411e399e313a1d0fe4bda2203e9a08749066106a1cff38b"
+    },
+    "inverse_format": {
+      "full_suite_failing_tests": 4,
+      "patch_sha256": "36081307f1414c0542b1abe4cee2d36ee415bf0cb5601a5167e3c2829ce25357"
+    }
+  },
+  "batches": {
+    "sample": {
+      "patches": 30,
+      "before": {
+        "median_total_run": {
+          "simulated_s": 103.127,
+          "cpu_s": 4.172,
+          "misses": 0
+        },
+        "cpu_runs_s": [
+          4.133,
+          4.172,
+          4.19
+        ],
+        "all_runs_same_simulated_time_and_misses": true
+      },
+      "after": {
+        "median_total_run": {
+          "simulated_s": 103.127,
+          "cpu_s": 4.281,
+          "misses": 0
+        },
+        "cpu_runs_s": [
+          4.218,
+          4.281,
+          4.329
+        ],
+        "all_runs_same_simulated_time_and_misses": true
+      }
+    },
+    "held": {
+      "patches": 14,
+      "before": {
+        "median_total_run": {
+          "simulated_s": 124.434,
+          "cpu_s": 2.918,
+          "misses": 0
+        },
+        "cpu_runs_s": [
+          2.914,
+          2.918,
+          2.934
+        ],
+        "all_runs_same_simulated_time_and_misses": true
+      },
+      "after": {
+        "median_total_run": {
+          "simulated_s": 122.971,
+          "cpu_s": 4.216,
+          "misses": 0
+        },
+        "cpu_runs_s": [
+          4.113,
+          4.228,
+          4.216
+        ],
+        "all_runs_same_simulated_time_and_misses": true
+      }
+    },
+    "mutations": {
+      "patches": 2,
+      "before": {
+        "median_total_run": {
+          "simulated_s": 600.0,
+          "cpu_s": 1.465,
+          "misses": 2
+        },
+        "cpu_runs_s": [
+          1.45,
+          1.465,
+          1.523
+        ],
+        "all_runs_same_simulated_time_and_misses": true
+      },
+      "after": {
+        "median_total_run": {
+          "simulated_s": 73.634,
+          "cpu_s": 0.389,
+          "misses": 0
+        },
+        "cpu_runs_s": [
+          0.387,
+          0.389,
+          0.399
+        ],
+        "all_runs_same_simulated_time_and_misses": true
+      }
+    }
+  },
+  "old_selector_with_new_calibration_matches_held_out_schedule": true
+}

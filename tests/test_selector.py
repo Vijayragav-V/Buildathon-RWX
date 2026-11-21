@@ -18,7 +18,7 @@ class SelectorTests(unittest.TestCase):
         self.source = 'VALUE = 2\n\ndef f(x):\n    if x:\n        return 1\n    return 0\n\ndef g():\n    return 3\n'
         (self.root/'sqlglot/example.py').write_text(self.source)
         self.tests = [{'number': 7, 'id': 'tests/a.py::test_a', 'seconds': .1}, {'number': 19, 'id': 'tests/a.py::test_b', 'seconds': .2}]
-        self.mapping = {'commit': PIN, 'tests': [t['id'] for t in self.tests], 'lines': {'sqlglot/example.py': {'4': [0], '5': [0], '6': [0], '9': [1]}}, 'reads': {}, 'uncertain': []}
+        self.mapping = {'commit': PIN, 'tests': [t['id'] for t in self.tests], 'lines': {'sqlglot/example.py': {'4': [0], '5': [0], '6': [0], '9': [1]}}, 'reads': {}, 'uncertain': [], 'import_calls': {'sqlglot/example.py': []}}
         self.selector = Selector(self.tests, self.mapping, self.root)
 
     def tearDown(self):
@@ -66,6 +66,47 @@ class SelectorTests(unittest.TestCase):
     def test_default_argument_is_conservative(self):
         after = self.source.replace('def f(x):', 'def f(x=1/0):')
         self.assertEqual(self.selector.select(patch(self.source, after)), {7, 19})
+
+    def test_import_time_call_overrides_partial_or_absent_runtime_hits(self):
+        name = 'sqlglot/example.py'
+        old = '@decorate\ndef config():\n    return 1\nSETTING = config()\n'
+        (self.root/name).write_text(old)
+        self.mapping['lines'][name] = {'3': [0]}
+        self.mapping['entered'] = {name: []}
+        self.mapping['import_calls'][name] = ['config:1']
+        change = patch(old, old.replace('return 1', 'return 2'))
+        self.assertEqual(self.selector.select(change), {7, 19})
+        del self.mapping['import_calls']
+        self.assertEqual(self.selector.select(change), {7, 19})
+
+    def test_lambda_creation_and_import_time_invocation(self):
+        name = 'sqlglot/example.py'
+        old = 'f = lambda x: x + 1\n'
+        (self.root/name).write_text(old)
+        self.mapping['lines'][name] = {'1': [0]}
+        change = patch(old, old.replace('+ 1', '+ 2'))
+        self.assertEqual(self.selector.select(change), {7})
+        self.mapping['import_calls'][name] = ['<lambda>:1']
+        self.assertEqual(self.selector.select(change), {7, 19})
+
+    def test_collected_factory_does_not_execute_nested_callback(self):
+        name = 'sqlglot/example.py'
+        old = 'def factory():\n    def fn(x):\n        return x + 1\n    return fn\nf = factory()\n'
+        (self.root/name).write_text(old)
+        self.mapping['import_calls'][name] = ['factory:1']
+        self.mapping['lines'][name] = {'3': [0]}
+        change = patch(old, old.replace('+ 1', '+ 2'))
+        self.assertEqual(self.selector.select(change), {7})
+        self.mapping['import_calls'][name].append('fn:2')
+        self.assertEqual(self.selector.select(change), {7, 19})
+
+    def test_import_time_call_precedes_identity_shortcut(self):
+        name = 'sqlglot/example.py'
+        old = 'def f(x):\n    return x is None\nSETTING = f(None)\n'
+        (self.root/name).write_text(old)
+        self.mapping['identity'] = {f'{name}:2:11': True}
+        self.mapping['import_calls'][name] = ['f:1']
+        self.assertEqual(self.selector.select(patch(old, old.replace(' is ', ' == '))), {7, 19})
 
     def test_class_literal_uses_recorded_class_consumers(self):
         old = 'class Dialect:\n    FLAG = True\n'

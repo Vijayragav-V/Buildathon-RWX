@@ -208,6 +208,14 @@ if __name__ == '__main__':
     source, previous, output = map(Path, sys.argv[1:])
     mapping = json.loads(previous.read_text())
     output = output.resolve(); source = source.resolve()
-    extra = build(source, mapping, collection_lines(source))
+    # The line that defines a lambda or decorated method can run at import
+    # without calling the body. Inventory actual calls during the same pass.
+    from tools.cold_scopes import start
+    calls = start(source)
+    early = collection_lines(source)
+    if early is not None:
+        mapping['import_calls'] = {file: sorted(keys) for file, keys in calls.items()
+                                   if any(k.startswith('<module>:') for k in keys)}
+    extra = build(source, mapping, early)
     mapping.update(extra)
     output.write_text(json.dumps(mapping, separators=(',', ':')))
