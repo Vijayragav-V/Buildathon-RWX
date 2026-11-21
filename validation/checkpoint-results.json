@@ -179,6 +179,48 @@
         "runs": 2,
         "probe_cpu": 0.0
       }
+    ],
+    "C": [
+      {
+        "batch": "sample",
+        "sim": 140.541,
+        "cpu": 3.774,
+        "net": 144.315,
+        "misses": 0,
+        "identical": true,
+        "runs": 2,
+        "probe_cpu": 3.109
+      },
+      {
+        "batch": "held",
+        "sim": 190.114,
+        "cpu": 1.715,
+        "net": 191.829,
+        "misses": 0,
+        "identical": true,
+        "runs": 2,
+        "probe_cpu": 1.086
+      },
+      {
+        "batch": "imports",
+        "sim": 73.634,
+        "cpu": 0.412,
+        "net": 74.046,
+        "misses": 0,
+        "identical": true,
+        "runs": 2,
+        "probe_cpu": 0.0
+      },
+      {
+        "batch": "fresh",
+        "sim": 102.196,
+        "cpu": 0.494,
+        "net": 102.69,
+        "misses": 0,
+        "identical": true,
+        "runs": 2,
+        "probe_cpu": 0.0
+      }
     ]
   },
   "decision_cost_at_A_s": {
@@ -186,5 +228,40 @@
     "old_line_outside_body": 110.451,
     "unsupported_declaration": 73.634,
     "import_time_function": 73.634
+  },
+  "full_selection_max_saving_removing_64_cheapest_s": 0.0,
+  "extra_full_suite_failures": {
+    "drop_list": 29,
+    "convert_style": 0
+  },
+  "extra_controls": {
+    "base": {
+      "missed_extra_scored_patches": [],
+      "selected_on_collection_errors": {
+        "if_argument": 114,
+        "array_dimension": 28
+      }
+    },
+    "A": {
+      "missed_extra_scored_patches": [],
+      "selected_on_collection_errors": {
+        "if_argument": 1620,
+        "array_dimension": 1620
+      }
+    },
+    "B": {
+      "missed_extra_scored_patches": [],
+      "selected_on_collection_errors": {
+        "if_argument": 1620,
+        "array_dimension": 1620
+      }
+    },
+    "C": {
+      "missed_extra_scored_patches": [],
+      "selected_on_collection_errors": {
+        "if_argument": 1620,
+        "array_dimension": 1620
+      }
+    }
   }
 }

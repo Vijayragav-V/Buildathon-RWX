@@ -193,13 +193,27 @@ class SelectorTests(unittest.TestCase):
 
     def test_tail_insertion_uses_whole_runtime_body(self):
         self.mapping['runtime_bodies'] = {'sqlglot/example.py:f:3': True}
-        change = patch(self.source, self.source.replace('    return 0\n', '    return 0\n    return 5\n'))
+        change = patch(self.source, self.source.replace('    return 0\n', '    return 0\n    extra_local = 5\n'))
         self.assertEqual(self.selector.select(change), {7})
         self.mapping['runtime_bodies'].clear()
         self.assertEqual(self.selector.select(change), {7, 19})
         yield_change = patch(self.source, self.source.replace('    return 0\n', '    return 0\n    yield 5\n'))
         self.mapping['runtime_bodies'] = {'sqlglot/example.py:f:3': True}
         self.assertEqual(self.selector.select(yield_change), {7, 19})
+
+    def test_inert_tail_proof_covers_both_sides_of_insertion(self):
+        self.mapping['runtime_bodies'] = {'sqlglot/example.py:f:3': True}
+        new = self.source.replace('    return 0\n','    return 0\n    return 5\n')
+        self.assertEqual(self.selector.select(patch(self.source,new)), set())
+
+    def test_compile_verification_retains_observable_locals_and_generator_changes(self):
+        import ast
+        from selector import inert_insertions
+        original = 'def f():\n    return 1\n'
+        for statement, expected in [('return 2', True), ('variable = 2', False), ('yield 2', False)]:
+            new = original + '    ' + statement + '\n'
+            self.assertEqual(inert_insertions(ast.parse(original), new, parse_patch(patch(original,new))[0],
+                                              'module.py'), expected)
 
     def test_deferred_factory_requires_verified_site_and_same_call(self):
         old = 'class A:\n    TABLE = {"k": build(True)}\n'

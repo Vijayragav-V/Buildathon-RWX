@@ -105,6 +105,41 @@ def apply_section(source, section):
     return ''.join(result), changed
 
 
+def inert_insertions(original_tree, modified, section, filename):
+    """Verify that inserted statements disappear from the actual compiled program."""
+    import marshal
+    inserted = set()
+    for _, _, new_start, _, body in section['hunks']:
+        line = new_start
+        for entry in body:
+            if entry.startswith('-'):
+                return False
+            if entry.startswith('+'):
+                inserted.add(line)
+            line += 1
+    if not inserted:
+        return False
+
+    class RemoveInserted(ast.NodeTransformer):
+        def generic_visit(self, node):
+            if isinstance(node, ast.stmt) and all(n in inserted for n in range(node.lineno, node.end_lineno + 1)):
+                return None
+            return super().generic_visit(node)
+
+    tree = ast.parse(modified)
+    try:
+        actual = compile(tree, filename, 'exec', dont_inherit=True)
+        # Preserve the patched coordinates on every surviving AST node. The
+        # control program then differs only by the inserted statements.
+        control = RemoveInserted().visit(tree)
+        if ast.dump(control) != ast.dump(original_tree):
+            return False
+        reference = compile(control, filename, 'exec', dont_inherit=True)
+        return marshal.dumps(actual) == marshal.dumps(reference)
+    except (TypeError, ValueError, SyntaxError):
+        return False
+
+
 def import_structure(node):
     """Retain import-time expressions, but ignore deferred function/lambda bodies."""
     if isinstance(node, ast.AST):
@@ -364,6 +399,8 @@ class Selector:
                 bodies = []
                 declarations = changed_classes(tree.body, after.body, bodies)
                 if declarations == set() and bodies:
+                    if inert_insertions(tree, modified, section, filename):
+                        return self.uncertain | child
                     return selected | child | self.body_users(filename, bodies)
                 return self.all
             # An import/collection call can initialize shared objects before
