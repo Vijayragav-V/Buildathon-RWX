@@ -1,9 +1,10 @@
+import ast
 import difflib
 from pathlib import Path
 import tempfile
 import unittest
 
-from selector import Selector, apply_section, parse_patch, schedule, PIN
+from selector import Selector, apply_section, only_generator_tail, parse_patch, schedule, PIN
 
 
 def patch(old, new, filename='sqlglot/example.py'):
@@ -200,6 +201,29 @@ class SelectorTests(unittest.TestCase):
         yield_change = patch(self.source, self.source.replace('    return 0\n', '    return 0\n    yield 5\n'))
         self.mapping['runtime_bodies'] = {'sqlglot/example.py:f:3': True}
         self.assertEqual(self.selector.select(yield_change), {7, 19})
+
+    def test_existing_generator_tail_retains_whole_body_and_rejects_promotion(self):
+        old = 'def f():\n    yield 1\n\ndef g(): pass\n'
+        (self.root/'sqlglot/example.py').write_text(old)
+        self.mapping['runtime_bodies'] = {'sqlglot/example.py:f:1': True}
+        self.mapping['lines']['sqlglot/example.py'] = {'2': [1]}
+        edit = patch(old, old.replace('yield 1', 'yield 1\n    yield 2'))
+        self.assertEqual(self.selector.select(edit), {7, 19})
+        self.mapping['generator_users'] = {'sqlglot/example.py:f:1': [1]}
+        self.assertEqual(self.selector.select(edit), {19})
+        self.mapping['generator_users']['sqlglot/example.py:f:1'].append(0)
+        self.assertEqual(self.selector.select(edit), {7, 19})
+        cases = (
+            ('def f():\n    def g(): yield 1', '    yield 2'),
+            ('def f():\n    def g(x=(yield 1)): pass', '    yield 2'),
+            ('def f():\n    yield 1', '    yield dynamic()'),
+            ('def f():\n    yield 1', '    local = 2'),
+        )
+        for source, statement in cases:
+            with self.subTest(source=source, statement=statement):
+                before = ast.parse(source).body[0]
+                after = ast.parse(source + '\n' + statement).body[0]
+                self.assertFalse(only_generator_tail(before, after))
 
     def test_inert_tail_proof_covers_both_sides_of_insertion(self):
         self.mapping['runtime_bodies'] = {'sqlglot/example.py:f:3': True}

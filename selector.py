@@ -216,6 +216,28 @@ def same_header(old, new, omit):
     return all(freeze(getattr(old, key)) == freeze(getattr(new, key)) for key in old._fields if key != omit)
 
 
+def only_generator_tail(old, new):
+    """A literal yield appended to an existing generator cannot change its calling convention."""
+    if len(new.body) <= len(old.body):
+        return False
+
+    def yields_in_block(stmts):
+        for stmt in stmts:
+            if isinstance(stmt, ast.Expr) and isinstance(stmt.value, (ast.Yield, ast.YieldFrom)):
+                return True
+            if isinstance(stmt, (ast.If, ast.For, ast.While)):
+                if yields_in_block(stmt.body) or yields_in_block(stmt.orelse):
+                    return True
+        return False
+
+    tail = new.body[len(old.body):]
+    return (all(ast.dump(a) == ast.dump(b) for a, b in zip(old.body, new.body))
+            and yields_in_block(old.body)
+            and all(isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Yield)
+                    and (stmt.value.value is None or isinstance(stmt.value.value, ast.Constant))
+                    for stmt in tail))
+
+
 def changed_classes(before, after, bodies, prefix=''):
     if len(before) != len(after):
         return None
@@ -233,8 +255,9 @@ def changed_classes(before, after, bodies, prefix=''):
         elif isinstance(old, (ast.FunctionDef, ast.AsyncFunctionDef)) and same_header(old, new, 'body'):
             # A generator changes its caller's result type before its body runs.
             if (old.decorator_list or ast.get_docstring(old) != ast.get_docstring(new)
-                    or any(isinstance(n, (ast.Yield, ast.YieldFrom))
-                           for fn in (old, new) for n in ast.walk(fn))):
+                    or (any(isinstance(n, (ast.Yield, ast.YieldFrom))
+                            for fn in (old, new) for n in ast.walk(fn))
+                        and not only_generator_tail(old, new))):
                 return None
             bodies.append(old)
         elif isinstance(old, (ast.Assign, ast.AnnAssign)) and literal_shape(old) == literal_shape(new) and safe_literal_edit(old, new):
@@ -337,6 +360,11 @@ class Selector:
                     for i in coverage.get(str(line), ())}
             if not hits:
                 return self.all
+            if any(isinstance(n, (ast.Yield, ast.YieldFrom)) for n in ast.walk(body)):
+                observed = self.mapping.get('generator_users', {}).get(key)
+                if observed is None:
+                    return self.all
+                hits.update(observed)
             users.update(self.translate(hits))
         return users
 

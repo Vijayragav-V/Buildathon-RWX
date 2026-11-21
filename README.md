@@ -49,8 +49,13 @@ The GitHub Actions workflow runs regression tests and `make sample` on Linux.
 
 For a combined class-setting and method-body edit, the selector unions the
 setting's consumers with whole-method coverage. This requires an unchanged
-method signature, no decorators or generators, and evidence that the pinned
-method body did not execute during module import or test collection.
+method signature, an undecorated function, and evidence that its body did not
+execute during import or test collection. For a generator, the supported edit
+appends literal yields to an otherwise identical body that already yields. A
+build-time CPython monitoring pass records generator execution, source and code
+inspection, and tests starting subprocesses. The selector includes those tests
+alongside whole-body coverage. An incomplete run or an unowned observation of
+the affected generator or its source retains the full selection.
 
 For cheap groups across test modules, the selector compares the cost of the
 original schedule with the best possible schedule after verification. It uses

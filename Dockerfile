@@ -19,6 +19,8 @@ COPY replay_costs.py /app/
 RUN PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python /app/replay_costs.py /opt/sqlglot /app/dependencies.json
 COPY closure_index.py /app/
 RUN python /app/closure_index.py /opt/sqlglot /app/dependencies.json
+COPY generator_index.py /app/
+RUN PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python /app/generator_index.py /opt/sqlglot /app/dependencies.json
 COPY selector.py replay.py /app/
 USER 65534:65534
 CMD ["python", "/app/selector.py"]
