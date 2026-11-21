@@ -1,0 +1,43 @@
+{
+  "environment": "macOS arm64, Python 3.14.3",
+  "container_validated": false,
+  "baseline_collection": "1621 passed; 25454 subtests passed",
+  "regression_tests": 18,
+  "previous_local_simulated_seconds": 311.883,
+  "optimized_local_simulated_seconds": 138.594,
+  "local_reduction_percent": 55.56,
+  "previous_official_hidden_batch": {
+    "total_seconds": 570.1,
+    "simulated_seconds": 568.607,
+    "misses": 0,
+    "source": "User-supplied screenshot; different batch from local samples"
+  },
+  "runs": [
+    {
+      "ok": true,
+      "simulated_milliseconds": 138594,
+      "misses": 0,
+      "cpu_seconds": 0.312593,
+      "wall_seconds": 0.317235,
+      "stdout_bytes": 3584
+    },
+    {
+      "ok": true,
+      "simulated_milliseconds": 138594,
+      "misses": 0,
+      "cpu_seconds": 0.307606,
+      "wall_seconds": 0.311276,
+      "stdout_bytes": 3584
+    },
+    {
+      "ok": true,
+      "simulated_milliseconds": 138594,
+      "misses": 0,
+      "cpu_seconds": 0.314865,
+      "wall_seconds": 0.319096,
+      "stdout_bytes": 3584
+    }
+  ],
+  "published": false,
+  "submitted": false
+}

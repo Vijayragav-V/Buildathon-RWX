@@ -73,20 +73,24 @@ def apply_section(source, section):
             raise ValueError('Invalid hunk offset')
         result.extend(original[cursor:pos])
         old_used = new_used = 0
+        replacing = False
         for line in body:
             kind, value = line[0], line[1:]
             if kind in ' -':
                 if pos >= len(original) or original[pos] != value:
                     raise ValueError('Patch does not match pinned source')
                 if kind == '-':
+                    replacing = True
                     changed.add(pos + 1)
                 else:
+                    replacing = False
                     result.append(value)
                 pos += 1
                 old_used += 1
             else:
                 # Include both sides of an insertion, including an empty function's boundary.
-                changed.update((max(1, pos), pos + 1))
+                if not replacing:
+                    changed.update((max(1, pos), pos + 1))
                 result.append(value)
             if kind in ' +':
                 new_used += 1
@@ -107,6 +111,85 @@ def import_structure(node):
     if isinstance(node, list):
         return tuple(import_structure(v) for v in node)
     return node
+
+
+def literal_shape(node):
+    if isinstance(node, ast.Constant):
+        return ('Constant', type(node.value).__name__)
+    if isinstance(node, ast.AST):
+        return (type(node).__name__, tuple((k, literal_shape(v)) for k, v in ast.iter_fields(node)))
+    if isinstance(node, list):
+        return tuple(literal_shape(v) for v in node)
+    return node
+
+
+def safe_literal_edit(old, new, inside_call=False):
+    """Do not narrow edits that can change import-time arithmetic or call arguments."""
+    if ast.dump(old) == ast.dump(new):
+        return True
+    if type(old) is not type(new):
+        return False
+    if isinstance(old, ast.Constant):
+        return type(old.value) is type(new.value) and (not inside_call or isinstance(old.value, bool))
+    if isinstance(old, (ast.BinOp, ast.BoolOp, ast.Compare, ast.IfExp, ast.Subscript)):
+        return False
+    for field in old._fields:
+        a, b = getattr(old, field), getattr(new, field)
+        if isinstance(a, ast.AST):
+            if not safe_literal_edit(a, b, inside_call or isinstance(old, ast.Call)):
+                return False
+        elif isinstance(a, list):
+            if len(a) != len(b):
+                return False
+            for x, y in zip(a, b):
+                if isinstance(x, ast.AST):
+                    if not safe_literal_edit(x, y, inside_call or isinstance(old, ast.Call)):
+                        return False
+                elif x != y:
+                    return False
+        elif a != b:
+            return False
+    return True
+
+
+def changed_classes(before, after, prefix=''):
+    if len(before) != len(after):
+        return None
+    changed = set()
+    for old, new in zip(before, after):
+        if ast.dump(old) == ast.dump(new):
+            continue
+        if isinstance(old, ast.ClassDef) and isinstance(new, ast.ClassDef):
+            if old.name != new.name or ast.dump(ast.Module(body=old.decorator_list + old.bases + old.keywords, type_ignores=[])) != ast.dump(ast.Module(body=new.decorator_list + new.bases + new.keywords, type_ignores=[])):
+                return None
+            inner = changed_classes(old.body, new.body, prefix + old.name + '.')
+            if inner is None:
+                return None
+            changed.update(inner)
+        elif prefix and isinstance(old, (ast.Assign, ast.AnnAssign)) and literal_shape(old) == literal_shape(new) and safe_literal_edit(old, new):
+            changed.add(prefix[:-1])
+        else:
+            return None
+    return changed
+
+
+def observed_equivalent(old, new, filename, observations):
+    if isinstance(old, ast.Compare) and isinstance(new, ast.Compare):
+        if len(old.ops) == len(new.ops) == 1:
+            pair = (type(old.ops[0]), type(new.ops[0]))
+            if pair in ((ast.Is, ast.Eq), (ast.IsNot, ast.NotEq)):
+                key = f'{filename}:{old.lineno}:{old.col_offset}'
+                return (observations.get(key) is True
+                        and ast.dump(old.left) == ast.dump(new.left)
+                        and [ast.dump(n) for n in old.comparators] == [ast.dump(n) for n in new.comparators])
+    if type(old) is not type(new):
+        return False
+    if isinstance(old, ast.AST):
+        return all(observed_equivalent(getattr(old, field), getattr(new, field), filename, observations)
+                   for field in old._fields)
+    if isinstance(old, list):
+        return len(old) == len(new) and all(observed_equivalent(a, b, filename, observations) for a, b in zip(old, new))
+    return old == new
 
 
 class Selector:
@@ -153,23 +236,41 @@ class Selector:
         # still process every section; SQL fixture comments are never discarded.
         if ast.dump(tree, include_attributes=False) == ast.dump(after, include_attributes=False):
             return set()
+        if observed_equivalent(tree, after, filename, self.mapping.get("identity", {})):
+            return set(self.uncertain)
         if import_structure(tree) != import_structure(after):
-            return self.all
+            classes = changed_classes(tree.body, after.body)
+            if not classes:
+                return self.all
+            selected = set(self.uncertain)
+            for cls in classes:
+                users = self.mapping.get('classes', {}).get(filename + ':' + cls)
+                if not users:
+                    return self.all
+                selected.update(self.translate(users))
+            return selected
         lines = self.mapping['lines'].get(filename, {})
         scopes = [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda))]
         selected = set()
         for lineno in changed:
             containing = [n for n in scopes if n.lineno <= lineno <= n.end_lineno]
             if not containing:
-                # Class/module constants and import effects escape ordinary line coverage.
                 return self.all
             scope = min(containing, key=lambda n: n.end_lineno - n.lineno)
-            # Decorators, defaults and signatures run during import, not during a call.
             if not isinstance(scope, ast.Lambda) and lineno < scope.body[0].lineno:
                 return self.all
+            # Cover the whole expression, not the entire function. A multiline
+            # condition may emit a trace event only on its first physical line.
+            expressions = [n for n in ast.walk(scope) if isinstance(n, ast.expr)
+                           and n.lineno <= lineno <= n.end_lineno]
+            expression = max(expressions, key=lambda n: n.end_lineno - n.lineno, default=None)
+            span = range(expression.lineno, expression.end_lineno + 1) if expression else [lineno]
             affected = set()
-            for line in range(scope.lineno, scope.end_lineno + 1):
+            for line in span:
                 affected.update(lines.get(str(line), ()))
+            if not affected:
+                for line in range(scope.lineno, scope.end_lineno + 1):
+                    affected.update(lines.get(str(line), ()))
             if not affected:
                 return self.all
             selected.update(self.translate(affected))

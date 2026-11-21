@@ -54,6 +54,8 @@ class Collector:
     def __init__(self):
         self.context = ''
         self.reads = {}
+        self.classes = {}
+        self.identity = {}
         self.failed = set()
         self.ids = []
         self.cov = coverage.Coverage(data_file=None, source=[str(root / 'sqlglot'), str(root / 'tests')], config_file=False)
@@ -103,6 +105,10 @@ if __name__ == "__main__":
     concurrent.futures.ProcessPoolExecutor = TracedPool
     c = Collector()
     sys.addaudithook(c.audit)
+    from identity_usage import install as install_identity
+    install_identity(root, c)
+    from class_usage import install
+    install(root, c)
     c.cov.start()
     status = pytest.main(['tests', '-q', '-p', 'pytest_timeout', '--timeout=180', '-o', 'cache_dir=/tmp/blast-pytest-cache'], plugins=[c])
     c.cov.stop()
@@ -142,6 +148,8 @@ if __name__ == "__main__":
             reads[key] = list(range(len(ids)))
     result = {'version': 1, 'commit': 'eb11aec4be8cb2122afe713a4816662c3f0fb2fa',
               'python': platform.python_version(), 'tests': ids, 'lines': files,
+              'identity': c.identity,
+              'classes': {k: expand(v) for k, v in c.classes.items()},
               'reads': reads, 'uncertain': sorted(c.failed), 'pytest_exit': int(status)}
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, separators=(',', ':')))

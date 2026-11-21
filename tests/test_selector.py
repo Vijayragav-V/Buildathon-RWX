@@ -67,6 +67,53 @@ class SelectorTests(unittest.TestCase):
         after = self.source.replace('def f(x):', 'def f(x=1/0):')
         self.assertEqual(self.selector.select(patch(self.source, after)), {7, 19})
 
+    def test_class_literal_uses_recorded_class_consumers(self):
+        old = 'class Dialect:\n    FLAG = True\n'
+        (self.root/'sqlglot/example.py').write_text(old)
+        self.mapping['classes'] = {'sqlglot/example.py:Dialect': [1]}
+        self.assertEqual(self.selector.select(patch(old, old.replace('True', 'False'))), {19})
+
+    def test_unobserved_class_falls_back(self):
+        old = 'class Dialect:\n    FLAG = True\n'
+        (self.root/'sqlglot/example.py').write_text(old)
+        self.assertEqual(self.selector.select(patch(old, old.replace('True', 'False'))), {7, 19})
+
+    def test_class_metaclass_change_falls_back(self):
+        old = 'class Dialect(metaclass=Old):\n    FLAG = True\n'
+        (self.root/'sqlglot/example.py').write_text(old)
+        self.mapping['classes'] = {'sqlglot/example.py:Dialect': [1]}
+        new = old.replace('Old', 'New').replace('True', 'False')
+        self.assertEqual(self.selector.select(patch(old, new)), {7, 19})
+
+    def test_observed_identity_equivalence(self):
+        old = 'def f(x):\n    return x is None\n'
+        (self.root/'sqlglot/example.py').write_text(old)
+        self.mapping['identity'] = {'sqlglot/example.py:2:11': True}
+        self.assertEqual(self.selector.select(patch(old, old.replace(' is ', ' == '))), set())
+
+    def test_unsafe_identity_keeps_tests(self):
+        old = 'def f(x):\n    return x is None\n'
+        (self.root/'sqlglot/example.py').write_text(old)
+        self.mapping['identity'] = {'sqlglot/example.py:2:11': False}
+        self.mapping['lines']['sqlglot/example.py'] = {'2': [0]}
+        self.assertEqual(self.selector.select(patch(old, old.replace(' is ', ' == '))), {7})
+
+    def test_comparison_observer_excludes_custom_equality(self):
+        from tools.identity_usage import comparison_equivalent
+        class Custom:
+            def __eq__(self, other):
+                raise AssertionError('custom equality must not execute')
+        self.assertFalse(comparison_equivalent(Custom(), None))
+        self.assertTrue(comparison_equivalent(object(), None))
+        self.assertTrue(comparison_equivalent(None, None))
+        self.assertFalse(comparison_equivalent(''.join(['equal', ' value']), ''.join(['equal', ' value'])))
+
+    def test_class_import_arithmetic_falls_back(self):
+        old = 'class Dialect:\n    FLAG = 1 / 2\n'
+        (self.root/'sqlglot/example.py').write_text(old)
+        self.mapping['classes'] = {'sqlglot/example.py:Dialect': [1]}
+        self.assertEqual(self.selector.select(patch(old, old.replace('1 / 2', '1 / 0'))), {7, 19})
+
     def test_schedule_accounts_for_worker_overhead(self):
         self.assertEqual(len(schedule(self.tests)), 1)
         tests = [{'number': i, 'seconds': 10} for i in range(8)]
