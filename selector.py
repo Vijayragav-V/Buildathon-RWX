@@ -8,6 +8,9 @@ import math
 from pathlib import Path
 import re
 import sys
+import sqlite3
+
+from dependency_store import load as load_dependencies
 
 PIN = 'eb11aec4be8cb2122afe713a4816662c3f0fb2fa'
 HUNK = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@')
@@ -84,6 +87,8 @@ def apply_section(source, section):
         if pos < cursor or pos > len(original):
             raise ValueError('Invalid hunk offset')
         result.extend(original[cursor:pos])
+        if (new_start - 1 if new_count else new_start) != len(result):
+            raise ValueError('Invalid new hunk offset')
         old_used = new_used = 0
         replacing = False
         for line in body:
@@ -495,12 +500,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--data', type=Path, default=Path('/data'))
     parser.add_argument('--source', type=Path, default=Path('/opt/sqlglot'))
-    parser.add_argument('--map', type=Path, default=Path('/app/dependencies.json'))
+    parser.add_argument('--map', type=Path, default=Path('/app/dependencies.sqlite'))
     args = parser.parse_args()
     tests = json.loads((args.data / 'tests.json').read_text())['tests']
     try:
-        selector = Selector(tests, json.loads(args.map.read_text()), args.source)
-    except (OSError, ValueError, KeyError):
+        selector = Selector(tests, load_dependencies(args.map), args.source)
+    except (OSError, ValueError, KeyError, sqlite3.DatabaseError):
         selector = None
         print('Dependency map unavailable; selecting all tests.', file=sys.stderr)
     from replay import ReplayBudget
@@ -510,8 +515,11 @@ def main():
     pending = []
     for patch in patches:
         change = patch.read_text()
-        chosen = selector.select(change) if selector else set(by_number)
-        proposal = budget.proposal(selector, chosen, by_number) if selector else None
+        try:
+            chosen = selector.select(change) if selector else set(by_number)
+            proposal = budget.proposal(selector, chosen, by_number) if selector else None
+        except sqlite3.DatabaseError:
+            chosen, proposal = set(by_number), None
         priority = proposal[0] if proposal else 0.
         pending.append((-priority, patch.name, patch, change, chosen, proposal))
     for _, _, patch, change, chosen, proposal in sorted(pending):
