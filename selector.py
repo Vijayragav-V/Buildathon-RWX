@@ -14,22 +14,30 @@ HUNK = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@')
 
 
 def best_schedule(tests):
-    """Try every allowed worker count with integer-millisecond LPT scheduling."""
+    """Find the best LPT schedule, pruning worker counts by a proven cost bound."""
     if not tests:
         return 0, []
-    ordered = sorted(tests, key=lambda t: (-math.floor(t['seconds'] * 1000 + .5), t['number']))
+    jobs = sorted(((math.floor(t['seconds'] * 1000 + .5), t['number']) for t in tests),
+                  key=lambda job: (-job[0], job[1]))
+    total = sum(duration for duration, _ in jobs)
+    largest = jobs[0][0]
     best = None
-    for count in range(1, min(8, len(tests)) + 1):
+    # A worker must finish the longest test, and one worker must carry at least
+    # the mean load. Prefer fewer workers on equal cost, as in the original search.
+    for count in range(1, min(8, len(jobs)) + 1):
+        bound = max(largest, (total + count - 1) // count) + 2000 * count
+        if best is not None and bound >= best[0]:
+            continue
         workers, loads = [[] for _ in range(count)], [0] * count
-        for test in ordered:
-            i = min(range(count), key=lambda j: (loads[j], j))
-            workers[i].append(test['number'])
-            loads[i] += math.floor(test['seconds'] * 1000 + .5)
+        for duration, number in jobs:
+            i = loads.index(min(loads))
+            workers[i].append(number)
+            loads[i] += duration
         workers = [w for w in workers if w]
-        key = (max(loads) + 2000 * len(workers), len(workers))
-        if best is None or key < best[0]:
-            best = key, workers
-    return best[0][0], best[1]
+        cost = max(loads) + 2000 * len(workers)
+        if best is None or cost < best[0]:
+            best = cost, workers
+    return best
 
 
 def schedule(tests):
