@@ -8,6 +8,15 @@ import sys
 _MISSING = object()
 
 
+class Evidence(dict):
+    def __init__(self, connection):
+        super().__init__()
+        self.connection = connection
+
+    def close(self):
+        self.connection.close()
+
+
 class Records:
     def __init__(self, connection, name):
         self.connection = connection
@@ -31,15 +40,19 @@ def load(path):
     if path.suffix != '.sqlite':
         return json.loads(path.read_bytes())
     connection = sqlite3.connect(path.resolve().as_uri() + '?mode=ro&immutable=1', uri=True)
-    mapping = {}
+    mapping = Evidence(connection)
     for name, value in connection.execute('SELECT family, metadata FROM families'):
         mapping[name] = Records(connection, name) if value is None else json.loads(value)
     return mapping
 
 
-def compile_map(source, destination):
+def compile_map(source, destination, root=None):
     mapping = json.loads(source.read_bytes())
-    with sqlite3.connect(destination) as db:
+    if root is not None:
+        from entry_index import build
+        mapping['entry_readers'] = build(root, mapping)
+    from contextlib import closing
+    with closing(sqlite3.connect(destination)) as db, db:
         db.execute('CREATE TABLE families(family TEXT PRIMARY KEY, metadata TEXT) WITHOUT ROWID')
         db.execute('CREATE TABLE records(family TEXT, key TEXT, value BLOB NOT NULL, '
                    'PRIMARY KEY(family,key)) WITHOUT ROWID')
@@ -53,4 +66,4 @@ def compile_map(source, destination):
 
 
 if __name__ == '__main__':
-    compile_map(Path(sys.argv[1]), Path(sys.argv[2]))
+    compile_map(*(Path(arg) for arg in sys.argv[1:]))

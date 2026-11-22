@@ -20,6 +20,8 @@ class SelectorTests(unittest.TestCase):
         (self.root/'sqlglot/example.py').write_text(self.source)
         self.tests = [{'number': 7, 'id': 'tests/a.py::test_a', 'seconds': .1}, {'number': 19, 'id': 'tests/a.py::test_b', 'seconds': .2}]
         self.mapping = {'commit': PIN, 'tests': [t['id'] for t in self.tests], 'lines': {'sqlglot/example.py': {'4': [0], '5': [0], '6': [0], '9': [1]}}, 'reads': {}, 'uncertain': [], 'import_calls': {'sqlglot/example.py': []}}
+        self.mapping['source_observers'] = {'sqlglot/example.py': []}
+        self.mapping['location_observers'] = {'sqlglot/example.py': []}
         self.selector = Selector(self.tests, self.mapping, self.root)
 
     def tearDown(self):
@@ -34,6 +36,13 @@ class SelectorTests(unittest.TestCase):
     def test_python_comment_only(self):
         self.assertEqual(self.selector.select(patch(self.source, '# comment\n'+self.source)), set())
 
+    def test_source_or_location_inspection_and_missing_evidence(self):
+        edit = patch(self.source, '# inserted\n' + self.source)
+        self.mapping['location_observers']['sqlglot/example.py'] = [1]
+        self.assertEqual(self.selector.select(edit), {19})
+        self.mapping['location_observers'].clear()
+        self.assertEqual(self.selector.select(edit), {7, 19})
+
     def test_mixed_comment_and_fixture(self):
         name = 'tests/fixtures/input.sql'
         (self.root/'tests/fixtures').mkdir(parents=True)
@@ -45,6 +54,20 @@ class SelectorTests(unittest.TestCase):
     def test_syntax_error_and_unknown_patch(self):
         for text in [patch(self.source, 'not valid python !\n'), 'GIT binary patch\n']:
             self.assertEqual(self.selector.select(text), {7, 19})
+
+    def test_invalid_function_body_fails_at_module_compile(self):
+        self.assertEqual(self.selector.select(patch(self.source, self.source.replace('return 1', 'break'))), {7, 19})
+
+    def test_source_encoding_edit_can_change_untouched_literals(self):
+        old = '# coding: utf-8\n' + self.source + 'TEXT = "café"\n'
+        (self.root/'sqlglot/example.py').write_text(old)
+        self.assertEqual(self.selector.select(patch(old, old.replace('utf-8', 'latin1'))), {7, 19})
+
+    def test_git_hunk_keeps_unicode_line_separator_inside_string(self):
+        original = 'TEXT = "a\u2028b"\n'
+        section = parse_patch('diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-'
+                              + original + '+' + original.replace('b"', 'c"'))[0]
+        self.assertEqual(apply_section(original, section)[0], original.replace('b"', 'c"'))
 
     def test_unmatched_source_falls_back(self):
         self.assertEqual(self.selector.select(patch(self.source.replace('VALUE = 2', 'VALUE = 5'), self.source)), {7, 19})

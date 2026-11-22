@@ -1,5 +1,7 @@
 """Bounded, per-test verification against an isolated, patched checkout."""
 import json
+import importlib
+from functools import lru_cache
 import os
 from pathlib import Path
 import resource
@@ -44,6 +46,14 @@ def cpu_seconds():
                    for who in (resource.RUSAGE_SELF, resource.RUSAGE_CHILDREN))
 
 
+@lru_cache(maxsize=1)
+def warm_test_framework():
+    """Share only the pinned framework's code pages, before collection or configuration."""
+    from _pytest.config import default_plugins
+    for name in default_plugins:
+        importlib.import_module('_pytest.' + name)
+
+
 def verify(source, edits, ids, timeout, cpu_limit, stop_early=False):
     deadline = time.monotonic() + timeout
     cpu_deadline = cpu_seconds() + cpu_limit
@@ -56,8 +66,9 @@ def verify(source, edits, ids, timeout, cpu_limit, stop_early=False):
                    SKIP_INTEGRATION='0')
         # Fork only the single-threaded selector on Linux. No patched module,
         # test module, or fixture has been imported in this process.
-        if sys.platform == 'linux' and 'sqlglot' not in sys.modules:
-            __import__('pytest')  # Share pytest code pages, never test state.
+        if (sys.platform == 'linux' and 'sqlglot' not in sys.modules and 'tests' not in sys.modules
+                and len(os.listdir('/proc/self/task')) == 1):
+            warm_test_framework()
             pid = os.fork()
             if pid == 0:
                 try:
@@ -132,7 +143,7 @@ def worker(root, destination, ids, stop_early=False):
                 phases.setdefault(report.nodeid, set()).add(report.when)
     files = sorted({nodeid.split('::', 1)[0] for nodeid in ids})
     status = pytest.main(['--import-mode=importlib', '-p', 'no:cacheprovider',
-                          '--no-header', '-q', *(['-x'] if stop_early else []), *files], plugins=[Reports()])
+                          '--no-header', '-q', '-p', 'pytest_timeout', '--timeout=180', *(['-x'] if stop_early else []), *files], plugins=[Reports()])
     modules = [module for name, module in sys.modules.copy().items()
                if name == 'sqlglot' or name.startswith('sqlglot.')]
     if not modules or any(not Path(getattr(m, '__file__', '') or '').absolute().is_relative_to(root)
@@ -186,14 +197,66 @@ def plan(chosen, tests, uncertain, collection=None):
     return best
 
 
+def measured_plan(chosen, tests, uncertain, collection, costs, previous, hints=frozenset()):
+    """Compare the marginal makespan benefit of actual, unmodified pytest invocations."""
+    from selector import best_schedule
+    if not chosen:
+        return previous
+    # Full selection is common. Only material candidates can bring down a large
+    # schedule; checking every possible removal here would itself cost CPU.
+    ordered = sorted((tests[n] for n in chosen - uncertain),
+                     key=lambda t: (-t['seconds'], t['number']))
+    if not ordered:
+        return previous
+    groups = [[t] for t in ordered[:3]]
+    if len(ordered) <= 192:
+        groups.append(ordered)
+        outside = [t for t in ordered if t['number'] not in hints]
+        if hints and 0 < len(outside) < len(ordered):
+            groups.append(outside)
+    initial = best_schedule([tests[n] for n in chosen])[0]
+    best = previous
+    for group in groups:
+        files = {t['file'] for t in group}
+        if any(not t['file'].startswith('tests/') or not t['id'].startswith(t['file']+'::')
+               for t in group):
+            continue
+        times = [costs.get(t['id']) for t in group]
+        if any(v is None for v in times):
+            continue
+        # Pytest imports common helpers once in a mixed-file session.
+        setup = max(collection.get(f, .55) for f in files) + .035 * (len(files) - 1)
+        estimate = max(.25, setup) + sum(times)
+        if estimate > 3.3:
+            continue
+        remaining = chosen.difference(t['number'] for t in group)
+        saving = (initial - best_schedule([tests[n] for n in remaining])[0]) / 1000
+        gain = saving - (0 if remaining else .65)
+        if gain <= 1.5 * estimate:
+            continue
+        proposal = gain / estimate, group, saving, not remaining and saving < 3.5, estimate
+        if best is None or proposal[0] > best[0]:
+            best = proposal
+    return best
+
+
 class ReplayBudget:
     def __init__(self, count):
         self.wall_left = min(20., max(3., count * .65))
         self.cpu_left = min(16., max(5., count * .55))
         self.planned_left = self.cpu_left
+        self.proposals = {}
 
-    def proposal(self, selector, chosen, tests):
-        return plan(chosen, tests, selector.uncertain, selector.mapping.get('collection_cpu'))
+    def proposal(self, selector, chosen, tests, hints=frozenset()):
+        key = frozenset(chosen), hints
+        if key not in self.proposals:
+            collection = selector.mapping.get('collection_cpu', {})
+            proposal = plan(chosen, tests, selector.uncertain, collection)
+            costs = selector.mapping.get('test_cpu')
+            if costs is not None:
+                proposal = measured_plan(chosen, tests, selector.uncertain, collection, costs, proposal, hints)
+            self.proposals[key] = proposal
+        return self.proposals[key]
 
     def refine(self, selector, chosen, patch, tests, proposal):
         if min(self.wall_left, self.cpu_left) < .6:
@@ -208,9 +271,11 @@ class ReplayBudget:
             edits = {}
             for section in parse_patch(patch):
                 name = section['old']
-                if (not name or name != section['new'] or not name.startswith('sqlglot/')
-                        or not name.endswith('.py') or Path(name).as_posix() != name
-                        or '..' in Path(name).parts or name in edits):
+                source_file = bool(name and name.startswith('sqlglot/') and name.endswith('.py'))
+                fixture = bool(name and name.startswith('tests/fixtures/')
+                               and selector.mapping.get('reads', {}).get(name) is not None)
+                if (not (source_file or fixture) or name != section['new']
+                        or Path(name).as_posix() != name or '..' in Path(name).parts or name in edits):
                     return chosen
                 edits[name] = apply_section(selector.baseline(name)[0], section)[0]
             # CPU is itself charged by the scorer. Even an all-pass probe

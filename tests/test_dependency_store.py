@@ -15,6 +15,7 @@ class DependencyStoreTests(unittest.TestCase):
                                        'lines': {'p.py': {'1': [1]}, 'empty': []}}))
             compile_map(src, db)
             out = load(db)
+            self.addCleanup(out.close)
             self.assertEqual(out['tests'], ['b', 'a'])
             self.assertEqual(out['lines'].get('p.py'), {'1': [1]})
             self.assertIn('empty', out['lines'])

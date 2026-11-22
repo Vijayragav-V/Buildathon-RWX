@@ -3,14 +3,18 @@ from __future__ import annotations
 
 import argparse
 import ast
+import io
 import json
 import math
 from pathlib import Path
 import re
 import sys
 import sqlite3
+import tokenize
 
 from dependency_store import load as load_dependencies
+from entry_index import changed_keys
+from patch_semantics import SourceComparison, same_compiled_module
 
 PIN = 'eb11aec4be8cb2122afe713a4816662c3f0fb2fa'
 HUNK = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@')
@@ -52,7 +56,7 @@ def parse_patch(text):
     sections = []
     current = None
     hunk = None
-    for line in text.splitlines(keepends=True):
+    for line in io.StringIO(text):
         if line.startswith('diff --git '):
             current = {'old': None, 'new': None, 'hunks': []}
             sections.append(current)
@@ -80,7 +84,7 @@ def parse_patch(text):
 
 
 def apply_section(source, section):
-    original = source.splitlines(keepends=True)
+    original = io.StringIO(source).readlines()
     result, changed, cursor = [], set(), 0
     for start, old_count, new_start, new_count, body in section['hunks']:
         pos = start - 1 if old_count else start
@@ -251,17 +255,17 @@ def only_generator_tail(old, new):
                     for stmt in tail))
 
 
-def changed_classes(before, after, bodies, prefix=''):
+def changed_classes(before, after, bodies, prefix='', comparison=None):
     if len(before) != len(after):
         return None
     changed = set()
     for old, new in zip(before, after):
-        if ast.dump(old) == ast.dump(new):
+        if (comparison and comparison.same_statement(old, new)) or ast.dump(old) == ast.dump(new):
             continue
         if isinstance(old, ast.ClassDef) and isinstance(new, ast.ClassDef):
             if not same_header(old, new, 'body'):
                 return None
-            inner = changed_classes(old.body, new.body, bodies, prefix + old.name + '.')
+            inner = changed_classes(old.body, new.body, bodies, prefix + old.name + '.', comparison)
             if inner is None:
                 return None
             changed.update(inner)
@@ -381,7 +385,7 @@ class Selector:
             users.update(self.translate(hits))
         return users
 
-    def select_section(self, section):
+    def select_section(self, section, hints=None):
         filename = section['old']
         if not filename or filename != section['new'] or filename == '/dev/null':
             return self.all
@@ -391,24 +395,44 @@ class Selector:
             readers = self.mapping['reads'].get(filename)
             return (self.translate(readers) | self.uncertain) if readers else self.all
         try:
+            # A coding cookie affects unchanged non-ASCII source throughout the file.
+            # Whole-file compilation also checks contextual errors accepted by ast.parse.
+            if min(changed, default=3) <= 2:
+                def encoding(text):
+                    return tokenize.detect_encoding(io.BytesIO(text.encode()).readline)[0]
+                if encoding(original) != encoding(modified):
+                    return self.all
             after = ast.parse(modified)
+            compile(after, filename, 'exec', dont_inherit=True)
         except (SyntaxError, ValueError):
             return self.all
         # Compare complete files, including string literals and docstrings. Mixed patches
         # still process every section; SQL fixture comments are never discarded.
-        if ast.dump(tree, include_attributes=False) == ast.dump(after, include_attributes=False):
-            return set()
+        comparison = SourceComparison(original, modified)
+        old_view, new_view = comparison.differences(tree, after)
+        if ast.dump(old_view) == ast.dump(new_view):
+            if original == modified:
+                return set()
+            metadata = ('source_observers' if same_compiled_module(original, modified, filename)
+                        else 'location_observers')
+            observed = self.mapping.get(metadata, {}).get(filename)
+            return self.all if observed is None else self.uncertain | self.translate(observed)
         child = self.translate(self.mapping.get('child_imports', {}).get(filename, ()))
-        equivalent = observed_equivalent(tree, after, filename, self.mapping.get("identity", {}))
+        equivalent = observed_equivalent(old_view, new_view, filename, self.mapping.get("identity", {}))
         selected = set(self.uncertain)
-        if import_structure(tree) != import_structure(after):
+        if import_structure(old_view) != import_structure(new_view):
+            # Exact executable equivalence also covers constants folded during class
+            # creation. A complete native run supplies explicit source/child observers.
+            observers = self.mapping.get('source_observers', {}).get(filename)
+            if observers is not None and same_compiled_module(original, modified, filename):
+                return selected | child | self.translate(observers)
             if equivalent:
                 return selected | child
             bodies = []
-            classes = changed_classes(tree.body, after.body, bodies)
+            classes = changed_classes(tree.body, after.body, bodies, comparison=comparison)
             if not classes:
                 readers = set()
-                if deferred_changes(tree, after, filename, self.mapping.get('deferred_calls', {}), readers):
+                if deferred_changes(old_view, new_view, filename, self.mapping.get('deferred_calls', {}), readers):
                     return selected | child | self.translate(readers)
                 return self.all
             selected.update(child)
@@ -423,6 +447,13 @@ class Selector:
                 # A cached instance or a classmethod can read a setting without
                 # constructing the class in the current test.
                 index = 'dictionary_values' if dictionary else 'scalar_readers'
+                if hints is not None:
+                    class_hits = self.mapping.get('classes', {}).get(f'{filename}:{cls}', ())
+                    hints.update(self.translate(class_hits))
+                    keyed = self.mapping.get('entry_readers', {}).get(field) if dictionary else None
+                    if keyed:
+                        for key in changed_keys(tree, after, cls, field):
+                            hints.update(self.translate(keyed.get(key, ())))
                 readers = self.mapping.get(index, {}).get(field)
                 if readers is None:
                     return self.all
@@ -438,7 +469,7 @@ class Selector:
                 # An insertion can straddle the old final statement and a blank
                 # line outside its body. Attribute it using the complete new AST.
                 bodies = []
-                declarations = changed_classes(tree.body, after.body, bodies)
+                declarations = changed_classes(tree.body, after.body, bodies, comparison=comparison)
                 if declarations == set() and bodies:
                     if inert_insertions(tree, modified, section, filename):
                         return self.uncertain | child
@@ -486,14 +517,17 @@ class Selector:
             selected.update(self.translate(affected))
         return selected | self.uncertain
 
-    def select(self, patch):
-        selected = set()
+    def candidates(self, patch):
+        selected, hints = set(), set()
         try:
             for section in parse_patch(patch):
-                selected.update(self.select_section(section))
+                selected.update(self.select_section(section, hints))
         except (ValueError, OSError, SyntaxError, KeyError, TypeError, UnicodeError):
-            return self.all
-        return selected
+            return self.all, frozenset()
+        return selected, frozenset(selected & hints)
+
+    def select(self, patch):
+        return self.candidates(patch)[0]
 
 
 def main():
@@ -516,8 +550,8 @@ def main():
     for patch in patches:
         change = patch.read_text()
         try:
-            chosen = selector.select(change) if selector else set(by_number)
-            proposal = budget.proposal(selector, chosen, by_number) if selector else None
+            chosen, hints = selector.candidates(change) if selector else (set(by_number), frozenset())
+            proposal = budget.proposal(selector, chosen, by_number, hints) if selector else None
         except sqlite3.DatabaseError:
             chosen, proposal = set(by_number), None
         priority = proposal[0] if proposal else 0.
@@ -527,6 +561,8 @@ def main():
             chosen = budget.refine(selector, chosen, change, by_number, proposal)
         workers = schedule([t for t in tests if t['number'] in chosen])
         print(json.dumps({'commit': patch.stem, 'workers': workers}, separators=(',', ':')))
+    if selector and hasattr(selector.mapping, 'close'):
+        selector.mapping.close()
 
 
 if __name__ == '__main__':

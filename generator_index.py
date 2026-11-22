@@ -6,6 +6,9 @@ import os
 from pathlib import Path
 import sys
 import threading
+import tempfile
+
+from child_observers import PoolInspections
 from types import AsyncGeneratorType, FrameType, FunctionType, GeneratorType
 
 import pytest
@@ -20,6 +23,28 @@ class GeneratorUses:
         self.uses = {}
         self.opaque = set()
         self.finished = set()
+        self.test_cpu = {}
+        self.started = {}
+        self.source_reads = {}
+        self.source_opaque = set()
+        self.tracked_launch = False
+
+    @staticmethod
+    def cpu_usec():
+        try:
+            with open('/sys/fs/cgroup/cpu.stat') as stream:
+                return int(dict(line.split() for line in stream)['usage_usec'])
+        except (OSError, KeyError, ValueError):
+            return None
+
+    def pytest_runtest_logstart(self, nodeid, location):
+        self.started[nodeid] = self.cpu_usec()
+
+    def pytest_runtest_logfinish(self, nodeid, location):
+        start, end = self.started.pop(nodeid, None), self.cpu_usec()
+        if start is not None and end is not None and end >= start:
+            self.test_cpu[nodeid] = round((end - start) / 1_000_000, 4)
+
 
     def record(self, path, scope=None):
         if not path.startswith(self.prefix):
@@ -35,8 +60,11 @@ class GeneratorUses:
         self.record(code.co_filename, f'{code.co_name}:{code.co_firstlineno}')
 
     def audit(self, event, args):
-        if event in ('os.fork', 'subprocess.Popen', 'os.posix_spawn', 'os.forkpty'):
-            self.opaque.add(self.context if threading.get_ident() == self.main_thread else None)
+        if event in ('os.fork', 'subprocess.Popen', 'os.posix_spawn', 'os.forkpty', 'os.system', 'os.exec'):
+            owner = self.context if threading.get_ident() == self.main_thread else None
+            self.opaque.add(owner)
+            if not self.tracked_launch:
+                self.source_opaque.add(owner)
             return
         if event not in ('open', 'object.__getattr__') or getattr(self.reading, 'busy', False):
             return
@@ -73,6 +101,8 @@ class GeneratorUses:
                         and parent.f_back.f_code.co_name == 'exec_module'
                         and parent.f_back.f_code.co_filename == '<frozen importlib._bootstrap_external>'):
                     return
+            owner = self.context if threading.get_ident() == self.main_thread else None
+            self.source_reads.setdefault('sqlglot/' + path[len(self.prefix):], set()).add(owner)
             self.record(path)
         finally:
             self.reading.busy = False
@@ -90,6 +120,7 @@ class GeneratorUses:
             self.finished.add(report.nodeid)
         if not report.passed or hasattr(report, 'wasxfail'):
             self.opaque.add(report.nodeid)
+            self.source_opaque.add(report.nodeid)
 
 
 def build(root, mapping):
@@ -103,16 +134,30 @@ def build(root, mapping):
         mon.register_callback(slot, event, obs.generator)
     mon.set_events(slot, mon.events.PY_START | mon.events.PY_RESUME | mon.events.PY_RETURN)
     sys.addaudithook(obs.audit)
-    try:
-        status = pytest.main(['tests', '-q', '--tb=line', '-p', 'no:cacheprovider',
+    with tempfile.TemporaryDirectory(prefix='source-observer-') as directory:
+        pools = PoolInspections(root, directory, obs)
+        try:
+            status = pytest.main(['tests', '-q', '--tb=line', '-p', 'no:cacheprovider',
                               '-p', 'pytest_timeout', '--timeout=180'], plugins=[obs])
-    finally:
-        mon.set_events(slot, 0)
-        mon.free_tool_id(slot)
+        finally:
+            mon.set_events(slot, 0)
+            mon.free_tool_id(slot)
+            complete = pools.finish(obs)
     ids = {n: i for i, n in enumerate(mapping['tests'])}
     if status or None in obs.opaque or not ids.keys() <= obs.finished:
         return {}
+    mapping['test_cpu'] = obs.test_cpu
     opaque = {ids[n] for n in obs.opaque if n in ids}
+    # A successful, complete observer run is required even for an empty reader set.
+    def file_observers(records):
+        uncertain = {ids[n] for n in obs.source_opaque if n in ids}
+        return {path.relative_to(root).as_posix(): sorted(uncertain | {ids[n] for n in contexts if n in ids})
+                for path in sorted((root/'sqlglot').rglob('*.py'))
+                if None not in (contexts := records.get(path.relative_to(root).as_posix(), set()))}
+    if complete and None not in obs.source_opaque:
+        mapping['source_observers'] = file_observers(obs.source_reads)
+        mapping['location_observers'] = file_observers(obs.uses)
+    # Generator guards keep their original independently collected execution evidence.
     out = {}
     for key, contexts in obs.uses.items():
         file, sep, _ = key.partition(':')

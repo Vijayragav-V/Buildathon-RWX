@@ -19,10 +19,10 @@ COPY replay_costs.py /app/
 RUN PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python /app/replay_costs.py /opt/sqlglot /app/dependencies.json
 COPY closure_index.py /app/
 RUN python /app/closure_index.py /opt/sqlglot /app/dependencies.json
-COPY generator_index.py /app/
+COPY generator_index.py child_observers.py /app/
 RUN PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python /app/generator_index.py /opt/sqlglot /app/dependencies.json
-COPY dependency_store.py /app/
-RUN python /app/dependency_store.py /app/dependencies.json /app/dependencies.sqlite
-COPY selector.py replay.py /app/
+COPY dependency_store.py entry_index.py /app/
+RUN python /app/dependency_store.py /app/dependencies.json /app/dependencies.sqlite /opt/sqlglot
+COPY selector.py replay.py patch_semantics.py /app/
 USER 65534:65534
 CMD ["python", "/app/selector.py"]
