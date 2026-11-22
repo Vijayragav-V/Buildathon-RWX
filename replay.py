@@ -5,6 +5,7 @@ from functools import lru_cache
 import os
 from pathlib import Path
 import resource
+import shutil
 import signal
 import subprocess
 import sys
@@ -13,6 +14,19 @@ import time
 
 
 def overlay(source, target, edits):
+    """Keep fixture discovery relative to the patched checkout, even through realpath."""
+    if any(path.startswith('tests/fixtures/') for path in edits):
+        # A symlinked helper's __file__.resolve() can lead back to the pinned
+        # fixture and falsely certify a passing test. The pinned tree fits in tmpfs.
+        shutil.copytree(source, target, dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns('.git', '__pycache__'))
+        for name, content in edits.items():
+            (target / name).write_text(content)
+        return
+    _source_overlay(source, target, edits)
+
+
+def _source_overlay(source, target, edits):
     """Mirror unchanged files, including only bytecode for unchanged modules."""
     groups = {}
     for path, content in edits.items():
@@ -31,7 +45,7 @@ def overlay(source, target, edits):
         elif item.name not in groups:
             dest.symlink_to(item, target_is_directory=item.is_dir())
         elif item.is_dir():
-            overlay(item, dest, groups[item.name])
+            _source_overlay(item, dest, groups[item.name])
         else:
             dest.write_text(groups[item.name][''])
 

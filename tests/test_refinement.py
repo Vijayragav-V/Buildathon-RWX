@@ -29,6 +29,26 @@ class RefinementTests(unittest.TestCase):
                 'x=A.EARLY\ndef f(a):\n    return a.DIRECT, getattr(a,"LOOKUP")\n')
             self.assertEqual(reference_map(root, {'sqlglot/a.py': {'7':[4,7]}}), {'DIRECT':[4,7]})
 
+    @unittest.skipUnless(find_spec('pytest'), 'verification requires pytest')
+    def test_isolated_fixture_read_through_resolved_helper(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            (root/'sqlglot').mkdir()
+            (root/'sqlglot/__init__.py').touch()
+            (root/'tests/fixtures').mkdir(parents=True)
+            (root/'tests/__init__.py').touch()
+            (root/'tests/fixtures/query.sql').write_text('old')
+            (root/'tests/helper.py').write_text(
+                'from pathlib import Path\n'
+                'def read(): return (Path(__file__).resolve().parent/"fixtures/query.sql").read_text()\n')
+            (root/'tests/test_read.py').write_text(
+                'import sqlglot\nfrom tests.helper import read\n'
+                'def test_original(): assert read() == "old"\n'
+                'def test_patched(): assert read() == "new"\n')
+            ids = ['tests/test_read.py::test_original', 'tests/test_read.py::test_patched']
+            self.assertEqual(verify(root, {'tests/fixtures/query.sql': 'new'}, ids, 10, 10), {ids[1]})
+            self.assertEqual((root/'tests/fixtures/query.sql').read_text(), 'old')
+
     def test_replay_plan_includes_mixed_files_but_preserves_uncertain_tests(self):
         tests = {i: {'number': i, 'id': f'{name}::test_{i}', 'file': name, 'seconds': seconds}
                  for i, (name, seconds) in enumerate([
