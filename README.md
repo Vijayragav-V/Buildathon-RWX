@@ -17,7 +17,7 @@ The GitHub Actions workflow runs regression tests and `make sample` on Linux.
 
 ## How it works
 
-1. During the image build, fetch SQLGlot at
+1. For dependency collection, fetch SQLGlot at
    `eb11aec4be8cb2122afe713a4816662c3f0fb2fa`, install the supplied locked test
    environment, and run its baseline tests with `SKIP_INTEGRATION=0`. The on-disk checkout is
    unchanged; build-only observers record class use and comparison behavior.
@@ -91,8 +91,21 @@ python selector.py --source /path/to/pinned/sqlglot \
 python score.py sample sample/answers.json output.jsonl
 ```
 
-The final image regenerates the map using the competition's pinned Python 3.13
-image. A native macOS development run cannot certify Linux container behavior.
+The submission build installs the locked dependencies and pinned SQLGlot checkout,
+then unpacks our baseline-only SQLite map. The installer verifies its SHA-256,
+dependency lock, successful baseline run, source revision, schema version, Python
+version and architecture.
+
+To regenerate the map, use the collector Dockerfile from the revision that
+produced it. From this checkout, run the following.
+
+```sh
+git show fe5eeadcb4613f318e355d6a858a186b5a489af4:Dockerfile | docker build --platform linux/amd64 -t rwx-map-collector -f - .
+docker run --rm --platform linux/amd64 --network none rwx-map-collector cat /app/dependencies.sqlite > /tmp/rwx-baseline.sqlite
+```
+
+Repeated collection can produce different measured CPU costs. The committed
+archive reproduces the exact database used for validation on every build.
 
 ## Limitations
 
