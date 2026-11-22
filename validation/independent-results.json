@@ -1,0 +1,325 @@
+{
+  "baseline": "014d03727706d37824e856c20bd8f643bc4ec59b",
+  "candidate": "280ef15c06e90c71a837d29eb7fb211f850bf938",
+  "image_without_fixture_fix": "292fad5b54c356d1643cd4699953972a0600a537",
+  "runs_per_image_per_batch": 3,
+  "python": "3.13.18",
+  "platform": "linux/amd64",
+  "sqlglot": "eb11aec4be8cb2122afe713a4816662c3f0fb2fa",
+  "aggregation": "Median container CPU plus simulated seconds. Each workload is scored separately. The public 30 and held-out 14 overlap the existing 53.",
+  "regressions_passed": 48,
+  "data": {
+    "public30": {
+      "patches": 30,
+      "optimal_known_failing_tests_simulated": 94.351,
+      "baseline": {
+        "image": "rwx-checkpoint-fast",
+        "simulated_s": 140.541,
+        "median_cpu_s": 4.053224,
+        "median_total_s": 144.594224,
+        "total_range_s": [
+          144.391111,
+          144.702357
+        ],
+        "cpu_range_s": [
+          3.850111,
+          4.161357
+        ],
+        "max_peak_mib": 234.199,
+        "selected_tests_across_patches": 1751,
+        "missed_failing_tests": 0,
+        "missed_commits": 0,
+        "schedule_sha256": "f85c050320b75eb3e089e5823b6938b28e22c38f92192a44644c91fa0efaa19e",
+        "identical_schedules": 3
+      },
+      "candidate": {
+        "image": "rwx-fixture-guard",
+        "simulated_s": 140.552,
+        "median_cpu_s": 2.937671,
+        "median_total_s": 143.489671,
+        "total_range_s": [
+          143.453383,
+          143.508897
+        ],
+        "cpu_range_s": [
+          2.901383,
+          2.956897
+        ],
+        "max_peak_mib": 127.727,
+        "selected_tests_across_patches": 1752,
+        "missed_failing_tests": 0,
+        "missed_commits": 0,
+        "schedule_sha256": "5d02ad269464856c24fb75827e6eb79418e9147b21dd1e9474140671950a9df9",
+        "identical_schedules": 3
+      }
+    },
+    "existing53": {
+      "patches": 53,
+      "optimal_known_failing_tests_simulated": 162.616,
+      "baseline": {
+        "image": "rwx-checkpoint-fast",
+        "simulated_s": 580.119,
+        "median_cpu_s": 5.292643,
+        "median_total_s": 585.411643,
+        "total_range_s": [
+          585.403713,
+          585.578286
+        ],
+        "cpu_range_s": [
+          5.284713,
+          5.459286
+        ],
+        "max_peak_mib": 241.258,
+        "selected_tests_across_patches": 15346,
+        "missed_failing_tests": 0,
+        "missed_commits": 0,
+        "schedule_sha256": "1f3595294bbbbacb04db40f896f183efa779d18ba150651adc3d4fee7ceedeae",
+        "identical_schedules": 3
+      },
+      "candidate": {
+        "image": "rwx-fixture-guard",
+        "simulated_s": 577.022,
+        "median_cpu_s": 4.976603,
+        "median_total_s": 581.998603,
+        "total_range_s": [
+          581.996339,
+          582.006395
+        ],
+        "cpu_range_s": [
+          4.974339,
+          4.984395
+        ],
+        "max_peak_mib": 142.426,
+        "selected_tests_across_patches": 15338,
+        "missed_failing_tests": 0,
+        "missed_commits": 0,
+        "schedule_sha256": "c18410d49ef3efdf9373b604a627822528d275daa96c36c972d59591a160210c",
+        "identical_schedules": 3
+      }
+    },
+    "held14": {
+      "patches": 14,
+      "optimal_known_failing_tests_simulated": 27.826,
+      "baseline": {
+        "image": "rwx-checkpoint-fast",
+        "simulated_s": 190.114,
+        "median_cpu_s": 1.77382,
+        "median_total_s": 191.88782,
+        "total_range_s": [
+          191.886531,
+          191.889162
+        ],
+        "cpu_range_s": [
+          1.772531,
+          1.775162
+        ],
+        "max_peak_mib": 220.609,
+        "selected_tests_across_patches": 3637,
+        "missed_failing_tests": 0,
+        "missed_commits": 0,
+        "schedule_sha256": "507a787b6623eb1fa5427df0661c58ffe6fc3232762d6d785e4af9470663ea7a",
+        "identical_schedules": 3
+      },
+      "candidate": {
+        "image": "rwx-independent-final",
+        "simulated_s": 190.114,
+        "median_cpu_s": 1.396241,
+        "median_total_s": 191.510241,
+        "total_range_s": [
+          191.469048,
+          191.601365
+        ],
+        "cpu_range_s": [
+          1.355048,
+          1.487365
+        ],
+        "max_peak_mib": 111.113,
+        "selected_tests_across_patches": 3637,
+        "missed_failing_tests": 0,
+        "missed_commits": 0,
+        "schedule_sha256": "507a787b6623eb1fa5427df0661c58ffe6fc3232762d6d785e4af9470663ea7a",
+        "identical_schedules": 3
+      }
+    },
+    "fresh5": {
+      "patches": 5,
+      "optimal_known_failing_tests_simulated": 55.021,
+      "baseline": {
+        "image": "rwx-checkpoint-fast",
+        "simulated_s": 172.722,
+        "median_cpu_s": 0.618627,
+        "median_total_s": 173.340627,
+        "total_range_s": [
+          173.324832,
+          173.358757
+        ],
+        "cpu_range_s": [
+          0.602832,
+          0.636757
+        ],
+        "max_peak_mib": 143.754,
+        "selected_tests_across_patches": 6581,
+        "missed_failing_tests": 0,
+        "missed_commits": 0,
+        "schedule_sha256": "76d1069b64edf8cfb3aedda317da52ad78298900175852904b0fcdf25e8f9497",
+        "identical_schedules": 3
+      },
+      "candidate": {
+        "image": "rwx-independent-final",
+        "simulated_s": 172.722,
+        "median_cpu_s": 0.396352,
+        "median_total_s": 173.118352,
+        "total_range_s": [
+          173.073597,
+          173.121143
+        ],
+        "cpu_range_s": [
+          0.351597,
+          0.399143
+        ],
+        "max_peak_mib": 40.426,
+        "selected_tests_across_patches": 6581,
+        "missed_failing_tests": 0,
+        "missed_commits": 0,
+        "schedule_sha256": "76d1069b64edf8cfb3aedda317da52ad78298900175852904b0fcdf25e8f9497",
+        "identical_schedules": 3
+      }
+    },
+    "adversarial": {
+      "patches": 3,
+      "optimal_known_failing_tests_simulated": 6.912,
+      "baseline": {
+        "image": "rwx-checkpoint-fast",
+        "simulated_s": 101.088,
+        "median_cpu_s": 0.484361,
+        "median_total_s": 101.572361,
+        "total_range_s": [
+          101.547345,
+          101.590164
+        ],
+        "cpu_range_s": [
+          0.459345,
+          0.502164
+        ],
+        "max_peak_mib": 144.012,
+        "selected_tests_across_patches": 3674,
+        "missed_failing_tests": 0,
+        "missed_commits": 0,
+        "schedule_sha256": "6b6ddf96736c9bfbf015c3d264d0cc5a9234b9989140b5f77a7f12466cedee6c",
+        "identical_schedules": 3
+      },
+      "candidate": {
+        "image": "rwx-independent-final",
+        "simulated_s": 101.088,
+        "median_cpu_s": 0.264459,
+        "median_total_s": 101.352459,
+        "total_range_s": [
+          101.345901,
+          101.388995
+        ],
+        "cpu_range_s": [
+          0.257901,
+          0.300995
+        ],
+        "max_peak_mib": 29.973,
+        "selected_tests_across_patches": 3674,
+        "missed_failing_tests": 0,
+        "missed_commits": 0,
+        "schedule_sha256": "6b6ddf96736c9bfbf015c3d264d0cc5a9234b9989140b5f77a7f12466cedee6c",
+        "identical_schedules": 3
+      }
+    },
+    "controls": {
+      "patches": 1,
+      "optimal_known_failing_tests_simulated": 0.0,
+      "baseline": {
+        "image": "rwx-checkpoint-fast",
+        "simulated_s": 36.817,
+        "median_cpu_s": 0.412658,
+        "median_total_s": 37.229658,
+        "total_range_s": [
+          37.227387,
+          37.230037
+        ],
+        "cpu_range_s": [
+          0.410387,
+          0.413037
+        ],
+        "max_peak_mib": 144.07,
+        "selected_tests_across_patches": 1620,
+        "missed_failing_tests": 0,
+        "missed_commits": 0,
+        "schedule_sha256": "5f9ee910f721851f43272616416aa03d9a8d1825e71b972131d3d4c28f7e2ce7",
+        "identical_schedules": 3
+      },
+      "candidate": {
+        "image": "rwx-independent-final",
+        "simulated_s": 0.0,
+        "median_cpu_s": 0.233594,
+        "median_total_s": 0.233594,
+        "total_range_s": [
+          0.232931,
+          0.236796
+        ],
+        "cpu_range_s": [
+          0.232931,
+          0.236796
+        ],
+        "max_peak_mib": 28.059,
+        "selected_tests_across_patches": 0,
+        "missed_failing_tests": 0,
+        "missed_commits": 0,
+        "schedule_sha256": "9e4ecae10f5de5db3a5e4d4d0b683b3c974da68f16f498f0de1c3ce9cee0539f",
+        "identical_schedules": 3
+      }
+    },
+    "fixture_holdout": {
+      "patches": 1,
+      "optimal_known_failing_tests_simulated": 2.105,
+      "baseline": {
+        "image": "rwx-checkpoint-fast",
+        "simulated_s": 2.105,
+        "median_cpu_s": 0.401419,
+        "median_total_s": 2.506419,
+        "total_range_s": [
+          2.50202,
+          2.518269
+        ],
+        "cpu_range_s": [
+          0.39702,
+          0.413269
+        ],
+        "max_peak_mib": 143.383,
+        "selected_tests_across_patches": 1,
+        "missed_failing_tests": 0,
+        "missed_commits": 0,
+        "schedule_sha256": "8d26eceb04195bf6333719532a1e17081d44855291a7623fb231b5b7cfd81438",
+        "identical_schedules": 3
+      },
+      "candidate": {
+        "image": "rwx-fixture-guard",
+        "simulated_s": 2.105,
+        "median_cpu_s": 0.227801,
+        "median_total_s": 2.332801,
+        "total_range_s": [
+          2.332801,
+          2.335023
+        ],
+        "cpu_range_s": [
+          0.227801,
+          0.230023
+        ],
+        "max_peak_mib": 27.168,
+        "selected_tests_across_patches": 1,
+        "missed_failing_tests": 0,
+        "missed_commits": 0,
+        "schedule_sha256": "8d26eceb04195bf6333719532a1e17081d44855291a7623fb231b5b7cfd81438",
+        "identical_schedules": 3
+      }
+    }
+  },
+  "unique_patch_contents": 63,
+  "distinct_patch_failure_pairs": 723,
+  "fixture_free_results": "The four fixture-free workloads reuse completed measurements from 292fad5. The later production change materializes fixture replays. Public 30, existing 53 and the new fixture holdout were measured on 280ef15.",
+  "limits": "Hidden Builders inputs, a cold official 10-minute build and third-party reference parity were not measured. Timed replay cutoffs may vary outside the three observed runs."
+}

@@ -23,7 +23,7 @@ print('RWX_METRICS '+json.dumps([cpu, int((cg/'memory.peak').read_text())]), fil
 """
 
 
-def measure(image, data, repeat):
+def measure(image, data, repeat, save_selections=None):
     tests = json.loads((data/'tests.json').read_text())['tests']
     answers = json.loads((data/'answers.json').read_text())['commits']
     command = ['docker', 'run', '--rm', '--platform', 'linux/amd64', '--network', 'none',
@@ -40,6 +40,8 @@ def measure(image, data, repeat):
         result = evaluate_run(proc.stdout, tests, answers)
         if not result['ok']:
             raise ValueError(result)
+        if not runs and save_selections is not None:
+            save_selections.write_bytes(proc.stdout)
         cpu, peak = json.loads(proc.stderr.decode().rsplit('RWX_METRICS ', 1)[1])
         selections = {row['commit']: sum(map(len, row['workers'])) for row in
                       (json.loads(line) for line in proc.stdout.splitlines())}
@@ -56,5 +58,6 @@ if __name__ == '__main__':
     parser.add_argument('image')
     parser.add_argument('data', type=Path)
     parser.add_argument('--repeat', type=int, default=3)
+    parser.add_argument('--save-selections', type=Path, help='save the first validated worker schedule')
     args = parser.parse_args()
-    print(json.dumps(measure(args.image, args.data.resolve(), args.repeat), indent=2))
+    print(json.dumps(measure(args.image, args.data.resolve(), args.repeat, args.save_selections), indent=2))

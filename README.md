@@ -1,4 +1,4 @@
-# Blast Radius: baseline dependency selector
+# Blast Radius dependency selector
 
 A submission for the RWX Builders Buildathon. It maps changes in the pinned
 SQLGlot source to baseline test dependencies and chooses the lowest-cost worker
@@ -28,8 +28,9 @@ The GitHub Actions workflow runs regression tests and `make sample` on Linux.
    multiprocessing serializer to retain serialization dependencies. The collector also records covered lines and file reads in supported Python
    subprocesses. Other launches and incomplete runs retain conservative coverage.
 3. At runtime, validate and apply each patch in memory against the original
-   source. Entire-file Python AST equality identifies comment/formatting-only
-   edits. SQL fixtures, including their comments and metadata, are never treated
+   source. Paired ASTs share unchanged statements. Compiler output and native
+   source and code-location observers distinguish formatting edits and equivalent
+   constant expressions. The selector checks encoding changes and contextual syntax errors. SQL fixtures, including their comments and metadata, are never treated
    as Python comments. Every file in a mixed patch is processed.
 4. For function-body changes, select tests covering the affected expression,
    falling back to function coverage when needed. Fixture changes select recorded
@@ -57,15 +58,26 @@ inspection, and tests starting subprocesses. The selector includes those tests
 alongside whole-body coverage. An incomplete run or an unowned observation of
 the affected generator or its source retains the full selection.
 
-For cheap groups across test modules, the selector compares the cost of the
-original schedule with the best possible schedule after verification. It uses
-build-time pytest collection measurements and the supplied test durations to
-prioritize probes within batch CPU and wall-time budgets. Each probe starts
-with fresh test state, applies every supported edit to an isolated checkout,
-and keeps the native pytest collection order. A test can be removed after
-its setup, call and teardown pass. Collection errors, timeouts and shared
-teardown failures discard the probe. Unknown tests retain their selections.
-Sample answers and validation inputs are excluded from the Docker build.
+Build-time collectors write the pinned maps to an indexed SQLite file. The runtime
+opens it read-only and loads evidence by family and key. Native pytest runs
+also measure individual test CPU and record code inspection and source reads
+from supported Python subprocesses. A missing observer record retains the
+conservative selection.
+
+The verifier estimates the change in scheduled cost using the supplied durations.
+It compares this with measured collection and test CPU. Keys and class consumers
+can guide which group to replay. Each discounted test must pass its original
+setup, call and teardown in an isolated patched checkout. The Linux parent warms
+pytest's built-in modules, then forks before importing SQLGlot or collecting tests.
+Each probe creates a fresh session. Source edits share unchanged files with the
+pinned checkout. Fixture edits use a private file tree so resolving a helper's
+real path still reaches the changed data. Timeouts, incomplete reports and shared
+teardown failures retain tests. The scheduler evaluates up to eight worker counts.
+
+For an import change, `validation/import_effects.py` can compare the pinned and
+patched namespaces in fresh interpreters at the same path. It reports changed
+values, alias groups and opaque state. The diagnostic stays outside the image.
+The runtime receives the patch batch and test catalog only.
 
 ## Local development without Docker
 
@@ -102,8 +114,23 @@ reports simulated time, and the server additionally charges container CPU time.
 
 ## Validation
 
-The Linux amd64 image completed `make sample` at **103.127 simulated seconds
-with zero missed commits** across 30 public patches. The prior submitted
-version scored 105.320 simulated seconds locally and 332.7 seconds on the
-official hidden batch. Paired measurements, including CPU and independent
-full-suite failure labels, are summarized in `validation/replay-results.json`.
+The local development branch improved the public 30 from 144.594 to 143.490
+total seconds and the existing 53 from 585.412 to 581.999, with zero missed
+commits. Each total is the median of three strict Linux AMD64 container runs.
+The public set has a 94.351-second simulated floor for a selector that catches
+every known failure. Its largest remaining false-positive cost is a
+36.817-second full-suite fallback on a class dictionary whose values feed a
+derived class attribute.
+
+See [the matched benchmark record](validation/independent-results.json) for CPU,
+simulated time, variability, memory, schedule hashes and mutation results.
+Competition-facing behavior can be reproduced with `make sample`. For labeled
+offline comparisons, run the following once per image and input directory.
+
+```sh
+python3 validation/compare_images.py IMAGE DATA --repeat 3 --save-selections /tmp/schedule.jsonl
+```
+
+This branch was developed from our prior selector and the supplied pinned
+SQLGlot checkout. The measured comparison is against our own commit
+`014d03727706d37824e856c20bd8f643bc4ec59b`.
